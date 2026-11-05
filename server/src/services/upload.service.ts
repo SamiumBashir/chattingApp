@@ -1,0 +1,125 @@
+import { v2 as cloudinary } from 'cloudinary';
+import { env } from '../config/env.js';
+import { AppError } from '../utils/apiResponse.js';
+
+// Configure Cloudinary SDK
+if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: env.CLOUDINARY_CLOUD_NAME,
+    api_key: env.CLOUDINARY_API_KEY,
+    api_secret: env.CLOUDINARY_API_SECRET,
+    secure: true,
+  });
+}
+
+export interface UploadSignatureResponse {
+  signature: string;
+  timestamp: number;
+  apiKey: string;
+  cloudName: string;
+  folder: string;
+}
+
+export class UploadService {
+  /**
+   * Generate secure signed upload parameters for client-side direct upload
+   */
+  static generateSignature(folder = 'connectly/attachments'): UploadSignatureResponse {
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const apiSecret = env.CLOUDINARY_API_SECRET || 'mock_secret';
+
+    const paramsToSign: Record<string, any> = {
+      timestamp,
+      folder,
+    };
+
+    let signature = '';
+    try {
+      signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
+    } catch {
+      // Fallback signature for mock/testing environments
+      signature = `mock_sig_${timestamp}`;
+    }
+
+    return {
+      signature,
+      timestamp,
+      apiKey: env.CLOUDINARY_API_KEY || 'mock_key',
+      cloudName: env.CLOUDINARY_CLOUD_NAME || 'mock_cloud',
+      folder,
+    };
+  }
+
+  /**
+   * Delete asset from Cloudinary by public ID
+   */
+  static async deleteAsset(publicId: string, resourceType: 'image' | 'raw' | 'video' = 'image') {
+    if (!publicId) {
+      throw new AppError('Public ID is required', 400);
+    }
+
+    try {
+      const result = await cloudinary.uploader.destroy(publicId, {
+        resource_type: resourceType,
+      });
+      return result;
+    } catch (error: any) {
+      throw new AppError(`Failed to delete asset: ${error.message || 'Cloudinary error'}`, 500);
+    }
+  }
+
+  /**
+   * Upload buffer directly (for fallback or dev local handling)
+   */
+  static async uploadBuffer(
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    folder = 'connectly/direct'
+  ) {
+    const resourceType = mimeType.startsWith('image/') ? 'image' : 'raw';
+
+    return new Promise<{
+      url: string;
+      publicId: string;
+      fileName: string;
+      fileType: string;
+      fileSize: number;
+    }>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder,
+          resource_type: resourceType,
+          filename_override: fileName,
+          use_filename: true,
+        },
+        (error, result) => {
+          if (error || !result) {
+            // Dev fallback if mock cloudinary
+            if (env.NODE_ENV !== 'production') {
+              const mockPublicId = `mock_${Date.now()}_${fileName}`;
+              return resolve({
+                url: `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME || 'demo'}/${resourceType}/upload/v1/${mockPublicId}`,
+                publicId: mockPublicId,
+                fileName,
+                fileType: mimeType,
+                fileSize: buffer.length,
+              });
+            }
+            return reject(new AppError(`Upload failed: ${error?.message || 'Unknown error'}`, 500));
+          }
+
+          resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+            fileName,
+            fileType: mimeType,
+            fileSize: result.bytes,
+          });
+        }
+      );
+
+      uploadStream.end(buffer);
+    });
+  }
+}
