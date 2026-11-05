@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/apiResponse.js';
+import { logger } from '../utils/logger.js';
 
 // Configure Cloudinary SDK
 if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
@@ -95,18 +96,27 @@ export class UploadService {
         },
         (error, result) => {
           if (error || !result) {
-            // Dev fallback if mock cloudinary
-            if (env.NODE_ENV !== 'production') {
-              const mockPublicId = `mock_${Date.now()}_${fileName}`;
+            logger.warn(`Cloudinary upload failed (${error?.message}). Falling back to inline data URL.`);
+            // Resilient fallback: For media under 5MB, generate data URL so messaging never breaks
+            if (buffer.length <= 5 * 1024 * 1024) {
+              const base64Data = buffer.toString('base64');
+              const dataUrl = `data:${mimeType};base64,${base64Data}`;
+              const fallbackId = `fallback_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
               return resolve({
-                url: `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME || 'demo'}/${resourceType}/upload/v1/${mockPublicId}`,
-                publicId: mockPublicId,
+                url: dataUrl,
+                publicId: fallbackId,
                 fileName,
                 fileType: mimeType,
                 fileSize: buffer.length,
               });
             }
-            return reject(new AppError(`Upload failed: ${error?.message || 'Unknown error'}`, 500));
+
+            return reject(
+              new AppError(
+                `Upload failed: ${error?.message || 'Invalid Cloudinary credentials'}. Please verify CLOUDINARY_CLOUD_NAME in settings.`,
+                500
+              )
+            );
           }
 
           resolve({
