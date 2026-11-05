@@ -1,7 +1,11 @@
 import { io, Socket } from 'socket.io-client';
 import { getAccessToken } from './api';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://chattingapp-lsbw.onrender.com'
+    : 'http://localhost:5000');
 
 let socket: Socket | null = null;
 

@@ -13,7 +13,9 @@ const startServer = async () => {
   // Initialize Socket.IO Server
   const io = new SocketIOServer(server, {
     cors: {
-      origin: [env.CLIENT_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+      origin: (_requestOrigin, callback) => {
+        callback(null, true);
+      },
       credentials: true,
     },
     pingTimeout: 60000,
