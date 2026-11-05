@@ -38,7 +38,7 @@ const startServer = async () => {
 
   server.listen(env.PORT, () => {
     logger.info(`🚀 Connectly server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
-    logger.info(`Health check available at http://localhost:${env.PORT}/api/v1/health`);
+    logger.info(`Internal health check: port ${env.PORT} (/api/v1/health)`);
   });
 
   // Graceful Shutdown
