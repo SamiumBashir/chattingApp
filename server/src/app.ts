@@ -72,6 +72,17 @@ export const createApp = (): Application => {
   apiV1Router.use('/admin', adminRoutes);
   apiV1Router.use('/', messagesRoutes);
 
+  // Root Welcome & Status
+  app.get('/', (_req: Request, res: Response) => {
+    res.status(200).json({
+      success: true,
+      name: 'Connectly Real-Time API',
+      version: '1.0.0',
+      status: 'operational',
+      health: '/api/v1/health',
+    });
+  });
+
   // Mount v1 router
   app.use('/api/v1', apiV1Router);
 
