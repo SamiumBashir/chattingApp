@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
-import { ArrowLeft, MoreVertical, Info, Users } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Info, Users, Phone, Video } from 'lucide-react';
 import { Conversation, User } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useChatStore } from '@/store/chatStore';
+import { useCall } from '@/features/call/CallContext';
 
 interface ConversationHeaderProps {
   conversation: Conversation;
@@ -17,6 +18,7 @@ export function ConversationHeader({
   currentUserId,
 }: ConversationHeaderProps) {
   const { setActiveConversation, isDetailsOpen, setIsDetailsOpen, onlineUsers } = useChatStore();
+  const { startCall, callState } = useCall();
 
   const otherUser =
     conversation.type === 'private'
@@ -93,6 +95,54 @@ export function ConversationHeader({
       </div>
 
       <div className="flex items-center gap-1">
+        {conversation.type === 'private' && otherUser && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={callState !== 'idle'}
+              onClick={() =>
+                startCall(
+                  {
+                    id: otherUser.id,
+                    name: otherUser.name || otherUser.username,
+                    username: otherUser.username,
+                    avatar: otherUser.avatar,
+                  },
+                  conversation.id,
+                  'audio'
+                )
+              }
+              className="h-9 w-9 text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+              title="Voice Call"
+            >
+              <Phone className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={callState !== 'idle'}
+              onClick={() =>
+                startCall(
+                  {
+                    id: otherUser.id,
+                    name: otherUser.name || otherUser.username,
+                    username: otherUser.username,
+                    avatar: otherUser.avatar,
+                  },
+                  conversation.id,
+                  'video'
+                )
+              }
+              className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+              title="Video Call"
+            >
+              <Video className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+
         <Button
           variant="ghost"
           size="icon"

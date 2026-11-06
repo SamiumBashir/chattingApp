@@ -26,6 +26,7 @@ import { NewConversationModal } from '@/features/conversations/NewConversationMo
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { MessageSearchModal } from '@/features/search/MessageSearchModal';
 import { UserSettingsModal } from '@/features/profile/UserSettingsModal';
+import { CallProvider } from '@/features/call/CallContext';
 import { MessageList } from '@/features/chat/MessageList';
 import { MessageComposer } from '@/features/chat/MessageComposer';
 import { useSocket } from '@/hooks/useSocket';
@@ -94,7 +95,8 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <CallProvider>
+      <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* 1. Left Icon Navigation Rail */}
       <aside className="hidden sm:flex h-full w-16 flex-col items-center justify-between border-r bg-card py-4 shrink-0 select-none">
         <div className="flex flex-col items-center gap-6">
@@ -272,6 +274,7 @@ export default function ChatPage() {
       {/* User Settings Modal */}
       <UserSettingsModal />
     </div>
+    </CallProvider>
   );
 }
 

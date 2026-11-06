@@ -258,6 +258,113 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       }
     );
 
+    // ==========================================
+    // WebRTC 1-on-1 Audio & Video Calling
+    // ==========================================
+
+    // 1. Initiate an outgoing call
+    socket.on(
+      'call:initiate',
+      (
+        data: {
+          recipientId: string;
+          conversationId: string;
+          callType: 'audio' | 'video';
+          caller?: {
+            id: string;
+            name: string;
+            avatar?: string;
+            username: string;
+          };
+        },
+        callback
+      ) => {
+        try {
+          const isOnline = activeUserSockets.has(data.recipientId);
+          if (!isOnline) {
+            if (typeof callback === 'function') {
+              callback({ success: false, reason: 'offline' });
+            }
+            return;
+          }
+
+          // Emit incoming call to recipient's personal room
+          io.to(`user:${data.recipientId}`).emit('call:incoming', {
+            callerId: userId,
+            caller: data.caller || {
+              id: userId,
+              name: user.username,
+              username: user.username,
+            },
+            conversationId: data.conversationId,
+            callType: data.callType,
+          });
+
+          if (typeof callback === 'function') {
+            callback({ success: true });
+          }
+        } catch (err: any) {
+          if (typeof callback === 'function') {
+            callback({ success: false, error: err.message });
+          }
+        }
+      }
+    );
+
+    // 2. Answer / Accept incoming call
+    socket.on(
+      'call:answer',
+      (data: { callerId: string; conversationId: string; callType: 'audio' | 'video' }) => {
+        io.to(`user:${data.callerId}`).emit('call:accepted', {
+          recipientId: userId,
+          conversationId: data.conversationId,
+          callType: data.callType,
+        });
+      }
+    );
+
+    // 3. Reject / Decline incoming call
+    socket.on('call:reject', (data: { callerId: string; reason?: string }) => {
+      io.to(`user:${data.callerId}`).emit('call:rejected', {
+        recipientId: userId,
+        reason: data.reason || 'declined',
+      });
+    });
+
+    // 4. End active or ongoing call
+    socket.on('call:end', (data: { targetUserId: string; conversationId?: string }) => {
+      if (data.targetUserId) {
+        io.to(`user:${data.targetUserId}`).emit('call:ended', {
+          byUserId: userId,
+          conversationId: data.conversationId,
+        });
+      }
+    });
+
+    // 5. WebRTC Signaling: Offer
+    socket.on('webrtc:offer', (data: { targetUserId: string; sdp: any }) => {
+      io.to(`user:${data.targetUserId}`).emit('webrtc:offer', {
+        senderId: userId,
+        sdp: data.sdp,
+      });
+    });
+
+    // 6. WebRTC Signaling: Answer
+    socket.on('webrtc:answer', (data: { targetUserId: string; sdp: any }) => {
+      io.to(`user:${data.targetUserId}`).emit('webrtc:answer', {
+        senderId: userId,
+        sdp: data.sdp,
+      });
+    });
+
+    // 7. WebRTC Signaling: ICE Candidate
+    socket.on('webrtc:ice-candidate', (data: { targetUserId: string; candidate: any }) => {
+      io.to(`user:${data.targetUserId}`).emit('webrtc:ice-candidate', {
+        senderId: userId,
+        candidate: data.candidate,
+      });
+    });
+
     // Disconnect cleanup
     socket.on('disconnect', () => {
       logger.debug(`Socket disconnected: ${socket.id} (user: ${user.username})`);
