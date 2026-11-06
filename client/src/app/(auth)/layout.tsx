@@ -3,6 +3,15 @@ import React from 'react';
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen w-full bg-[#5D26C1] bg-gradient-to-br from-[#6A28D9] via-[#5B21B6] to-[#451296] flex items-center justify-center py-6 px-3 sm:py-10 sm:px-6 lg:p-8 relative overflow-x-hidden overflow-y-auto">
+      {/* High-priority preload for LCP hero artwork */}
+      <link
+        rel="preload"
+        as="image"
+        href="/images/auth-illustration.webp"
+        type="image/webp"
+        fetchPriority="high"
+      />
+
       {/* Floating isometric background decorative plates with fixed container to prevent scrollbar bloat */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-12 -left-12 w-72 h-52 bg-white/10 backdrop-blur-xs rounded-3xl transform -rotate-12 skew-x-6" />

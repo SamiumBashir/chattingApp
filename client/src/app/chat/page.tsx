@@ -56,14 +56,21 @@ export default function ChatPage() {
   // Mount real-time Socket.IO gateway connection and events
   useSocket();
 
-  // Initialize auth and fetch conversations
+  // Initialize auth or perform instant client-side redirect for guests
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('connectly_access_token');
+      if (!token && !document.cookie.includes('connectly_') && !document.cookie.includes('accessToken')) {
+        router.replace('/login');
+        return;
+      }
+    }
     initialize();
-  }, [initialize]);
+  }, [initialize, router]);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
-      router.push('/login');
+      router.replace('/login');
     } else if (isAuthenticated) {
       fetchConversations();
     }

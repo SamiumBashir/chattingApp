@@ -191,12 +191,12 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           }}
         >
           <Image
-            src="/images/auth-illustration.jpg"
+            src="/images/auth-illustration.webp"
             alt="Connectly Chat Illustration"
             fill
             className="object-contain"
             priority
-            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 60vw, 50vw"
+            sizes="(max-width: 640px) 380px, (max-width: 1024px) 500px, 686px"
           />
         </div>
       </div>

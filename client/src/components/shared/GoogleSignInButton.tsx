@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Script from 'next/script';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { Loader2 } from 'lucide-react';
@@ -54,34 +55,12 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
     '1059985140649-olcn0thicrmc95ebml1fk3f0jb3liefm.apps.googleusercontent.com';
 
-  // Load Google Identity Services Script dynamically if client ID is set
+  // Check if SDK is already loaded on window
   useEffect(() => {
-    if (!clientId) {
-      return;
-    }
-
-    if (window.google?.accounts?.id) {
+    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
       setIsSdkLoaded(true);
-      return;
     }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      setIsSdkLoaded(true);
-    };
-    script.onerror = () => {
-      // eslint-disable-next-line no-console
-      console.warn('Failed to load Google Identity Services SDK.');
-    };
-    document.body.appendChild(script);
-
-    return () => {
-      // Don't remove script to allow reusing across navigations
-    };
-  }, [clientId]);
+  }, []);
 
   // Handle credential response from Google
   const handleCredentialResponse = async (credential: string) => {
@@ -152,6 +131,16 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   return (
     <div className="w-full">
+      {/* Deduplicated lazy-loaded Google Identity Services SDK to protect LCP */}
+      {clientId && (
+        <Script
+          id="google-identity-services-sdk"
+          src="https://accounts.google.com/gsi/client"
+          strategy="lazyOnload"
+          onLoad={() => setIsSdkLoaded(true)}
+        />
+      )}
+
       {/* Container where Google's official iframe button renders if client ID exists */}
       {clientId && isSdkLoaded && (
         <div ref={buttonContainerRef} className="w-full flex justify-center min-h-[44px]" />

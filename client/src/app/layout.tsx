@@ -15,6 +15,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://accounts.google.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://accounts.google.com" />
+        <link rel="dns-prefetch" href="https://chattingapp-lsbw.onrender.com" />
+      </head>
       <body className="min-h-screen bg-background font-sans antialiased text-foreground">
         <QueryProvider>{children}</QueryProvider>
       </body>
