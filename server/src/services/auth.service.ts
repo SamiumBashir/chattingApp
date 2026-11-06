@@ -145,9 +145,9 @@ export class AuthService {
 
     await user.save();
 
-    // Create session & refresh token (expires in 7 days)
+    // Create session & refresh token (expires in 30 days)
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const session = await Session.create({
       user: user._id,
@@ -207,7 +207,7 @@ export class AuthService {
 
     // Create new session & refresh token
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const session = await Session.create({
       user: user._id,
@@ -302,7 +302,7 @@ export class AuthService {
 
     // Create session & refresh token
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const session = await Session.create({
       user: user._id,
@@ -366,7 +366,7 @@ export class AuthService {
     session.refreshTokenHash = newHash;
     session.userAgent = meta.userAgent || session.userAgent;
     session.ipAddress = meta.ipAddress || session.ipAddress;
-    session.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await session.save();
 
     const accessToken = generateAccessToken({
@@ -390,6 +390,16 @@ export class AuthService {
   static async logout(sessionId: string) {
     if (sessionId) {
       await Session.findByIdAndUpdate(sessionId, { revokedAt: new Date() });
+    }
+  }
+
+  /**
+   * Logout user by revoking session associated with refresh token
+   */
+  static async logoutByRefreshToken(rawRefreshToken: string) {
+    if (rawRefreshToken) {
+      const hashed = hashToken(rawRefreshToken);
+      await Session.findOneAndUpdate({ refreshTokenHash: hashed }, { revokedAt: new Date() });
     }
   }
 

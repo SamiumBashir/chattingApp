@@ -7,15 +7,42 @@ const API_BASE_URL =
     ? 'https://chattingapp-lsbw.onrender.com/api/v1'
     : 'http://localhost:5000/api/v1');
 
-// In-memory access token storage (Security rule: Never store access token in localStorage)
+// Persistent access & refresh token storage with in-memory caching
 let inMemoryAccessToken: string | null = null;
 
 export const setAccessToken = (token: string | null): void => {
   inMemoryAccessToken = token;
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem('connectly_access_token', token);
+    } else {
+      localStorage.removeItem('connectly_access_token');
+    }
+  }
 };
 
 export const getAccessToken = (): string | null => {
+  if (!inMemoryAccessToken && typeof window !== 'undefined') {
+    inMemoryAccessToken = localStorage.getItem('connectly_access_token');
+  }
   return inMemoryAccessToken;
+};
+
+export const setRefreshToken = (token: string | null): void => {
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem('connectly_refresh_token', token);
+    } else {
+      localStorage.removeItem('connectly_refresh_token');
+    }
+  }
+};
+
+export const getRefreshToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('connectly_refresh_token');
+  }
+  return null;
 };
 
 export const apiClient = axios.create({
@@ -29,8 +56,9 @@ export const apiClient = axios.create({
 // Request interceptor to attach access token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    if (inMemoryAccessToken && config.headers) {
-      config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
+    const token = getAccessToken();
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -85,15 +113,23 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshResponse = await axios.post<ApiResponse<{ accessToken: string }>>(
+        const storedRefreshToken = getRefreshToken();
+        const refreshResponse = await axios.post<ApiResponse<{ accessToken: string; refreshToken?: string }>>(
           `${API_BASE_URL}/auth/refresh`,
-          {},
-          { withCredentials: true }
+          { refreshToken: storedRefreshToken },
+          {
+            withCredentials: true,
+            headers: storedRefreshToken ? { 'x-refresh-token': storedRefreshToken } : undefined,
+          }
         );
 
         const newAccessToken = refreshResponse.data.data?.accessToken;
+        const newRefreshToken = refreshResponse.data.data?.refreshToken;
         if (newAccessToken) {
           setAccessToken(newAccessToken);
+          if (newRefreshToken) {
+            setRefreshToken(newRefreshToken);
+          }
           if (originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           }
@@ -102,10 +138,12 @@ apiClient.interceptors.response.use(
         } else {
           processQueue(new Error('Failed to refresh token'), null);
           setAccessToken(null);
+          setRefreshToken(null);
         }
       } catch (refreshError) {
         processQueue(refreshError, null);
         setAccessToken(null);
+        setRefreshToken(null);
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

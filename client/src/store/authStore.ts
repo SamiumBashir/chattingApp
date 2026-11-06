@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { User } from '../types';
 import { authService, LoginDTO, RegisterDTO } from '../services/auth.service';
+import { getAccessToken, getRefreshToken } from '../lib/api';
 
 interface AuthState {
   user: User | null;
@@ -19,9 +20,27 @@ interface AuthState {
   clearError: () => void;
 }
 
+const getStoredUser = (): User | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('connectly_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const getStoredIsAuth = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    localStorage.getItem('connectly_access_token') ||
+    localStorage.getItem('connectly_refresh_token')
+  );
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  isAuthenticated: false,
+  user: getStoredUser(),
+  isAuthenticated: getStoredIsAuth(),
   isLoading: false,
   isInitialized: false,
   error: null,
@@ -30,6 +49,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.login(data);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('connectly_user', JSON.stringify(response.user));
+      }
       set({
         user: response.user,
         isAuthenticated: true,
@@ -48,6 +70,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.googleLogin(credential);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('connectly_user', JSON.stringify(response.user));
+      }
       set({
         user: response.user,
         isAuthenticated: true,
@@ -66,6 +91,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.register(data);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('connectly_user', JSON.stringify(response.user));
+      }
       set({
         user: response.user,
         isAuthenticated: true,
@@ -87,6 +115,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (err) {
       // Ignore logout errors
     } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('connectly_user');
+        localStorage.removeItem('connectly_access_token');
+        localStorage.removeItem('connectly_refresh_token');
+      }
       set({
         user: null,
         isAuthenticated: false,
@@ -99,17 +132,49 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialize: async () => {
     if (get().isInitialized) return;
 
-    set({ isLoading: true });
+    // Fast check: if no tokens, user is definitely logged out
+    const token = getAccessToken();
+    const refreshToken = getRefreshToken();
+    if (!token && !refreshToken) {
+      set({ user: null, isAuthenticated: false, isInitialized: true, isLoading: false });
+      return;
+    }
+
     try {
-      const response = await authService.refresh();
-      set({
-        user: response.user,
-        isAuthenticated: true,
-        isInitialized: true,
-        isLoading: false,
-      });
+      // 1. First attempt to validate access token with /auth/me
+      try {
+        const user = await authService.getMe();
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('connectly_user', JSON.stringify(user));
+        }
+        set({
+          user,
+          isAuthenticated: true,
+          isInitialized: true,
+          isLoading: false,
+        });
+        return;
+      } catch {
+        // If getMe failed (e.g. access token expired), perform silent refresh
+        const refreshRes = await authService.refresh();
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('connectly_user', JSON.stringify(refreshRes.user));
+        }
+        set({
+          user: refreshRes.user,
+          isAuthenticated: true,
+          isInitialized: true,
+          isLoading: false,
+        });
+        return;
+      }
     } catch {
-      // If refresh fails, user is simply unauthenticated
+      // Refresh token truly revoked or invalid
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('connectly_user');
+        localStorage.removeItem('connectly_access_token');
+        localStorage.removeItem('connectly_refresh_token');
+      }
       set({
         user: null,
         isAuthenticated: false,
@@ -122,7 +187,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   updateUser: (updatedUser: Partial<User>) => {
     const currentUser = get().user;
     if (currentUser) {
-      set({ user: { ...currentUser, ...updatedUser } });
+      const updated = { ...currentUser, ...updatedUser };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('connectly_user', JSON.stringify(updated));
+      }
+      set({ user: updated });
     }
   },
 

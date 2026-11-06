@@ -11,9 +11,9 @@ const setRefreshCookie = (res: Response, token: string) => {
   res.cookie('refreshToken', token, {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    path: '/api/v1/auth',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days persistent login
   });
 };
 
@@ -21,8 +21,8 @@ const clearRefreshCookie = (res: Response) => {
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    path: '/api/v1/auth',
+    sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
   });
 };
 
@@ -42,6 +42,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       {
         user: result.user,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
         verificationToken: env.NODE_ENV !== 'production' ? result.verificationToken : undefined,
       },
       201
@@ -62,6 +63,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       {
         user: result.user,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       },
       200
     );
@@ -82,6 +84,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       {
         user: result.user,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       },
       200
     );
@@ -92,13 +95,17 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
 
 export const refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const refreshToken = req.cookies?.refreshToken;
+    const refreshToken =
+      req.cookies?.refreshToken ||
+      req.body?.refreshToken ||
+      (req.headers['x-refresh-token'] as string);
     const meta = getDeviceMetadata(req);
     const result = await AuthService.refresh(refreshToken, meta);
     setRefreshCookie(res, result.refreshToken);
 
     sendSuccess(res, {
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       user: result.user,
     });
   } catch (error) {
@@ -112,6 +119,14 @@ export const logout = async (req: AuthenticatedRequest, res: Response, next: Nex
     const sessionId = req.user?.sessionId;
     if (sessionId) {
       await AuthService.logout(sessionId);
+    } else {
+      const refreshToken =
+        req.cookies?.refreshToken ||
+        req.body?.refreshToken ||
+        (req.headers['x-refresh-token'] as string);
+      if (refreshToken) {
+        await AuthService.logoutByRefreshToken(refreshToken);
+      }
     }
     clearRefreshCookie(res);
     sendSuccess(res, { message: 'Successfully logged out' });
