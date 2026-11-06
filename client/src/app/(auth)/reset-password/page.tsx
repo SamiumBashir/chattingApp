@@ -67,17 +67,17 @@ function ResetPasswordForm() {
 
   if (isSuccess) {
     return (
-      <div className="text-center py-4">
+      <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-2xl border border-white/20 mx-auto text-center py-6">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 mb-4">
           <CheckCircle2 className="h-6 w-6" />
         </div>
-        <h3 className="text-lg font-bold text-foreground">Password Reset Complete</h3>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h3 className="text-lg font-bold text-slate-900">Password Reset Complete</h3>
+        <p className="mt-2 text-sm text-slate-500">
           Your password has been securely updated and existing sessions have been revoked.
         </p>
         <div className="mt-6">
           <Link href="/login">
-            <Button className="w-full">Sign in with New Password</Button>
+            <Button className="w-full bg-[#5850EC] hover:bg-[#4E44C4]">Sign in with New Password</Button>
           </Link>
         </div>
       </div>
@@ -85,10 +85,10 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div>
+    <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-2xl border border-white/20 mx-auto">
       <div className="mb-6 text-center sm:text-left">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Reset your password</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reset your password</h2>
+        <p className="mt-1 text-sm text-slate-500">
           Enter your new password below to regain account access
         </p>
       </div>

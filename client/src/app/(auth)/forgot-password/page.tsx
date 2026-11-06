@@ -49,21 +49,21 @@ export default function ForgotPasswordPage() {
 
   if (isSuccess) {
     return (
-      <div className="text-center py-4">
+      <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-2xl border border-white/20 mx-auto text-center py-8">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 mb-4">
           <CheckCircle2 className="h-6 w-6" />
         </div>
-        <h3 className="text-lg font-bold text-foreground">Password Reset Link Sent</h3>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h3 className="text-lg font-bold text-slate-900">Password Reset Link Sent</h3>
+        <p className="mt-2 text-sm text-slate-500">
           If an account exists with that email address, we have sent instructions to reset your password.
         </p>
 
         {demoToken && (
-          <div className="mt-4 rounded-md bg-muted p-3 text-xs text-left">
-            <span className="font-semibold block mb-1">Development Reset Link:</span>
+          <div className="mt-4 rounded-md bg-slate-50 p-3 text-xs text-left border border-slate-200">
+            <span className="font-semibold block mb-1 text-slate-800">Development Reset Link:</span>
             <Link
               href={`/reset-password?token=${demoToken}`}
-              className="text-primary hover:underline break-all"
+              className="text-[#5850EC] hover:underline break-all"
             >
               /reset-password?token={demoToken}
             </Link>
@@ -82,10 +82,10 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div>
+    <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-2xl border border-white/20 mx-auto">
       <div className="mb-6 text-center sm:text-left">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Forgot your password?</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Forgot your password?</h2>
+        <p className="mt-1 text-sm text-slate-500">
           Enter your account email and we will send you a reset link
         </p>
       </div>

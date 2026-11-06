@@ -80,10 +80,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div>
+    <div className="w-full max-w-xl bg-white rounded-3xl p-8 sm:p-10 shadow-2xl border border-white/20 mx-auto">
       <div className="mb-6 text-center sm:text-left">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Create your account</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Create your account</h2>
+        <p className="mt-1 text-sm text-slate-500">
           Join Connectly and start messaging in real-time
         </p>
       </div>

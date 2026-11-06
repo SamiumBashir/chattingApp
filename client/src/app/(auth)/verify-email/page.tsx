@@ -144,9 +144,11 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>}>
-      <VerifyEmailContent />
-    </Suspense>
+    <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-2xl border border-white/20 mx-auto">
+      <Suspense fallback={<div className="p-4 text-center text-sm text-slate-400">Loading...</div>}>
+        <VerifyEmailContent />
+      </Suspense>
+    </div>
   );
 }
 

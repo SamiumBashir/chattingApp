@@ -1,33 +1,18 @@
 import React from 'react';
-import Link from 'next/link';
-import { MessageSquare, ShieldCheck } from 'lucide-react';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-muted/40 py-12 sm:px-6 lg:px-8">
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <Link href="/" className="inline-flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <MessageSquare className="h-6 w-6" />
-          </div>
-          <span className="text-2xl font-bold tracking-tight text-foreground">Connectly</span>
-        </Link>
-      </div>
+    <div className="min-h-screen w-full bg-[#5D26C1] bg-gradient-to-br from-[#6A28D9] via-[#5B21B6] to-[#451296] flex items-center justify-center p-3 sm:p-6 lg:p-8 relative overflow-hidden">
+      {/* Floating isometric background decorative plates matching reference image */}
+      <div className="absolute -top-12 -left-12 w-72 h-52 bg-white/10 backdrop-blur-xs rounded-3xl transform -rotate-12 skew-x-6 pointer-events-none" />
+      <div className="absolute top-1/4 -right-16 w-60 h-44 bg-white/10 backdrop-blur-xs rounded-3xl transform rotate-12 -skew-y-6 pointer-events-none" />
+      <div className="absolute -bottom-10 -left-8 w-80 h-48 bg-white/10 backdrop-blur-xs rounded-3xl transform rotate-45 pointer-events-none" />
+      <div className="absolute -bottom-16 right-1/4 w-80 h-36 bg-white/10 backdrop-blur-xs rounded-3xl transform -rotate-6 pointer-events-none" />
 
-      {/* Main Auth Form Container */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="rounded-xl border bg-card p-6 sm:p-8 shadow-card">
-          {children}
-        </div>
-
-        {/* Security badge footer */}
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          <span>Secured with end-to-end authentication & encrypted sessions</span>
-        </div>
+      {/* Main Content Area */}
+      <div className="w-full flex items-center justify-center relative z-10">
+        {children}
       </div>
     </div>
   );
 }
-
