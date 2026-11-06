@@ -13,7 +13,6 @@ import {
   Image as ImageIcon,
   Mic,
   Trash2,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { User, Attachment } from '@/types';
@@ -37,7 +36,6 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [compressionStatus, setCompressionStatus] = useState<string | null>(null);
 
   const {
     replyingToMessage,
@@ -106,7 +104,6 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
     if (!file) return;
 
     setUploadError(null);
-    setCompressionStatus(null);
 
     // 1. Strict 10MB limit verification
     if (file.size > MAX_IMAGE_INPUT_BYTES) {
@@ -118,23 +115,16 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
     }
 
     setIsUploading(true);
-    setCompressionStatus(`Compressing image (${formatBytes(file.size)})...`);
 
     try {
       // 2. Compress image down to < 200KB
       const result = await compressImage(file);
-      setCompressionStatus(
-        `Optimized: ${formatBytes(result.originalSize)} → ${formatBytes(result.compressedSize)} (${result.compressionRatio}% reduction)`
-      );
 
       // 3. Upload compressed image file
       const uploaded = await uploadService.uploadFile(result.file, 'connectly/attachments');
       setAttachments((prev) => [...prev, uploaded]);
-
-      setTimeout(() => setCompressionStatus(null), 5000);
     } catch (err: any) {
       setUploadError(err.message || 'Failed to compress and upload image');
-      setCompressionStatus(null);
     } finally {
       setIsUploading(false);
       if (imageInputRef.current) imageInputRef.current.value = '';
@@ -172,12 +162,10 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
 
   const handleSendVoice = async () => {
     setIsUploading(true);
-    setCompressionStatus('Uploading voice message...');
     try {
       const voiceFile = await stopRecording();
       if (!voiceFile) {
         setIsUploading(false);
-        setCompressionStatus(null);
         return;
       }
 
@@ -192,10 +180,8 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
         replyingToMessage?.id,
         [uploaded]
       );
-      setCompressionStatus(null);
     } catch (err: any) {
       setUploadError(err.message || 'Failed to send voice message');
-      setCompressionStatus(null);
     } finally {
       setIsUploading(false);
     }
@@ -294,8 +280,8 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
         </div>
       )}
 
-      {/* Attachments & Compression status banner */}
-      {(attachments.length > 0 || isUploading || compressionStatus || uploadError || voiceError) && (
+      {/* Attachments preview banner */}
+      {(attachments.length > 0 || isUploading || uploadError || voiceError) && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-2">
           {attachments.map((att, idx) => (
             <div
@@ -328,15 +314,7 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
             </div>
           ))}
 
-          {/* Compression feedback badge */}
-          {compressionStatus && (
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">
-              <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              <span className="font-medium">{compressionStatus}</span>
-            </div>
-          )}
-
-          {isUploading && !compressionStatus && (
+          {isUploading && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               <span>Uploading attachment...</span>
