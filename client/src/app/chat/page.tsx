@@ -31,6 +31,7 @@ import { MessageComposer } from '@/features/chat/MessageComposer';
 import { useSocket } from '@/hooks/useSocket';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { useTheme } from '@/lib/theme';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -51,7 +52,7 @@ export default function ChatPage() {
     setIsSettingsOpen,
   } = useChatStore();
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDarkMode, toggleTheme } = useTheme();
 
   // Mount real-time Socket.IO gateway connection and events
   useSocket();
@@ -75,15 +76,6 @@ export default function ChatPage() {
       fetchConversations();
     }
   }, [isInitialized, isAuthenticated, router, fetchConversations]);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    if (!isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
 
   const handleLogout = async () => {
     await logout();
@@ -157,7 +149,7 @@ export default function ChatPage() {
           </button>
 
           <button
-            onClick={toggleDarkMode}
+            onClick={toggleTheme}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             title="Toggle theme"
           >

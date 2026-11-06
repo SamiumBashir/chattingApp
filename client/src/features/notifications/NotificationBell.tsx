@@ -16,7 +16,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { formatDate } from '@/lib/utils';
 import { requestNotificationPermission } from '@/lib/sound';
 
-export function NotificationBell() {
+interface NotificationBellProps {
+  align?: 'left' | 'right';
+}
+
+export function NotificationBell({ align }: NotificationBellProps = {}) {
   const {
     notifications,
     unreadCount,
@@ -97,7 +101,13 @@ export function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute left-14 bottom-0 sm:left-auto sm:right-0 sm:top-12 z-50 w-80 sm:w-96 rounded-xl border bg-card p-3 shadow-xl animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className={`absolute ${
+            align === 'right'
+              ? 'right-0 top-11'
+              : 'left-14 bottom-0 sm:left-auto sm:right-0 sm:top-12'
+          } z-50 w-[calc(100vw-2rem)] max-w-sm sm:w-96 rounded-xl border bg-card p-3 shadow-xl animate-in fade-in zoom-in-95 duration-150`}
+        >
           {/* Header */}
           <div className="flex items-center justify-between border-b pb-2 mb-2">
             <div className="flex items-center gap-2">

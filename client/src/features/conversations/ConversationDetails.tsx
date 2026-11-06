@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Users, Shield, UserMinus, LogOut, Ban, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ArrowLeft, Users, Shield, UserMinus, LogOut, Ban, CheckCircle2, Loader2 } from 'lucide-react';
 import { Conversation, User } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { conversationService } from '@/services/conversation.service';
 import { userService } from '@/services/user.service';
 import { useChatStore } from '@/store/chatStore';
-import { formatDate } from '@/lib/utils';
 
 interface ConversationDetailsProps {
   conversation: Conversation;
@@ -35,6 +34,23 @@ export function ConversationDetails({
     (p) => p.user?.id === currentUserId
   )?.role;
   const isOwnerOrAdmin = currentRole === 'owner' || currentRole === 'admin';
+
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isCheckingBlocked, setIsCheckingBlocked] = useState(false);
+
+  // Check if this user is in the current user's blocked list
+  useEffect(() => {
+    if (otherParticipant?.id) {
+      setIsCheckingBlocked(true);
+      userService
+        .getBlockedUsers()
+        .then((list) => {
+          setIsBlocked(list.some((u) => u.id === otherParticipant.id));
+        })
+        .catch(() => {})
+        .finally(() => setIsCheckingBlocked(false));
+    }
+  }, [otherParticipant?.id]);
 
   const handleLeaveGroup = async () => {
     if (!confirm('Are you sure you want to leave this group?')) return;
@@ -68,7 +84,9 @@ export function ConversationDetails({
     setIsLoading(true);
     try {
       await userService.blockUser(targetUserId);
+      setIsBlocked(true);
       setActionMessage('User has been blocked');
+      setTimeout(() => setActionMessage(null), 3000);
     } catch (err: any) {
       alert(err.message || 'Failed to block user');
     } finally {
@@ -76,16 +94,44 @@ export function ConversationDetails({
     }
   };
 
+  const handleUnblockUser = async (targetUserId: string) => {
+    setIsLoading(true);
+    try {
+      await userService.unblockUser(targetUserId);
+      setIsBlocked(false);
+      setActionMessage('User unblocked successfully');
+      setTimeout(() => setActionMessage(null), 3000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to unblock user');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="flex h-full w-80 flex-col border-l bg-card shrink-0">
+    <div className="fixed inset-0 z-50 flex flex-col bg-card md:static md:z-auto md:h-full md:w-80 md:border-l md:shrink-0 animate-in slide-in-from-right duration-150">
       {/* Header */}
-      <div className="flex h-16 items-center justify-between border-b px-4">
-        <h3 className="font-bold text-sm text-foreground">
-          {isGroup ? 'Group Information' : 'Contact Details'}
-        </h3>
+      <div className="flex h-16 items-center justify-between border-b px-4 shrink-0 bg-card">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="md:hidden rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground -ml-2 transition-colors"
+            title="Back to chat"
+            aria-label="Back to chat"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h3 className="font-bold text-sm text-foreground truncate">
+            {isGroup ? 'Group Information' : 'Contact Details'}
+          </h3>
+        </div>
         <button
+          type="button"
           onClick={onClose}
-          className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="hidden md:flex rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          title="Close details"
+          aria-label="Close details"
         >
           <X className="h-5 w-5" />
         </button>
@@ -103,7 +149,7 @@ export function ConversationDetails({
               src={otherParticipant?.avatar}
               name={otherParticipant?.name || 'User'}
               size="xl"
-              className="h-20 w-20 mb-3"
+              className="h-20 w-20 mb-3 ring-2 ring-primary/20"
             />
           )}
 
@@ -118,7 +164,7 @@ export function ConversationDetails({
           </p>
 
           {actionMessage && (
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-600 font-medium">
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-600 font-medium animate-in fade-in">
               <CheckCircle2 className="h-3.5 w-3.5" /> {actionMessage}
             </div>
           )}
@@ -182,6 +228,7 @@ export function ConversationDetails({
                       )}
                       {canRemove && (
                         <button
+                          type="button"
                           onClick={() => handleRemoveMember(user.id)}
                           className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                           title="Remove member"
@@ -198,7 +245,7 @@ export function ConversationDetails({
         )}
 
         {/* Actions section */}
-        <div className="pt-4 border-t space-y-2">
+        <div className="pt-4 border-t space-y-2 shrink-0">
           {isGroup ? (
             <Button
               variant="destructive"
@@ -211,15 +258,37 @@ export function ConversationDetails({
             </Button>
           ) : (
             otherParticipant && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBlockUser(otherParticipant.id)}
-                isLoading={isLoading}
-                className="w-full gap-2 text-xs text-destructive hover:bg-destructive/10"
-              >
-                <Ban className="h-4 w-4" /> Block User
-              </Button>
+              isCheckingBlocked ? (
+                <div className="flex items-center justify-center p-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : isBlocked ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium border border-destructive/20">
+                    <Ban className="h-4 w-4 shrink-0" />
+                    <span>This user is blocked</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUnblockUser(otherParticipant.id)}
+                    isLoading={isLoading}
+                    className="w-full gap-2 text-xs hover:bg-muted"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Unblock User
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBlockUser(otherParticipant.id)}
+                  isLoading={isLoading}
+                  className="w-full gap-2 text-xs text-destructive hover:bg-destructive/10 border-destructive/30"
+                >
+                  <Ban className="h-4 w-4" /> Block User
+                </Button>
+              )
             )
           )}
         </div>
@@ -227,4 +296,3 @@ export function ConversationDetails({
     </div>
   );
 }
-

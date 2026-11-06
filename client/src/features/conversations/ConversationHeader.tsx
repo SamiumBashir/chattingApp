@@ -55,34 +55,41 @@ export function ConversationHeader({
           <ArrowLeft className="h-4 w-4" />
         </Button>
 
-        <div className="relative shrink-0">
-          {conversation.type === 'group' ? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold ring-1 ring-border">
-              {displayAvatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={displayAvatar}
-                  alt={displayName}
-                  className="aspect-square h-full w-full rounded-full object-cover"
-                />
-              ) : (
-                <Users className="h-5 w-5" />
-              )}
-            </div>
-          ) : (
-            <Avatar
-              src={displayAvatar}
-              name={displayName}
-              size="md"
-              isOnline={isOnline}
-            />
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsDetailsOpen(true)}
+          className="flex items-center gap-3 min-w-0 text-left hover:opacity-85 transition-opacity"
+          title="View profile & details"
+        >
+          <div className="relative shrink-0">
+            {conversation.type === 'group' ? (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold ring-1 ring-border">
+                {displayAvatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={displayAvatar}
+                    alt={displayName}
+                    className="aspect-square h-full w-full rounded-full object-cover"
+                  />
+                ) : (
+                  <Users className="h-5 w-5" />
+                )}
+              </div>
+            ) : (
+              <Avatar
+                src={displayAvatar}
+                name={displayName}
+                size="md"
+                isOnline={isOnline}
+              />
+            )}
+          </div>
 
-        <div className="truncate">
-          <h3 className="font-bold text-sm text-foreground truncate">{displayName}</h3>
-          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
-        </div>
+          <div className="truncate">
+            <h3 className="font-bold text-sm text-foreground truncate">{displayName}</h3>
+            <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+          </div>
+        </button>
       </div>
 
       <div className="flex items-center gap-1">

@@ -1,17 +1,36 @@
 'use client';
 
 import React from 'react';
-import { Search, Plus, MessageSquare, Users, MessageCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  Search,
+  Plus,
+  MessageSquare,
+  Users,
+  MessageCircle,
+  Settings,
+  Sun,
+  Moon,
+  Shield,
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
 import { ConversationItem } from './ConversationItem';
 import { useChatStore } from '@/store/chatStore';
+import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/lib/theme';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
 
 interface ConversationListProps {
   currentUserId: string;
 }
 
 export function ConversationList({ currentUserId }: ConversationListProps) {
+  const router = useRouter();
+  const { user } = useAuthStore();
+  const { isDarkMode, toggleTheme } = useTheme();
+
   const {
     conversations,
     activeConversationId,
@@ -21,6 +40,7 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
     filterType,
     setFilterType,
     setIsNewChatOpen,
+    setIsSettingsOpen,
     isLoadingConversations,
   } = useChatStore();
 
@@ -51,9 +71,74 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
 
   return (
     <div className="flex h-full w-full flex-col bg-card border-r">
-      {/* Top Header */}
-      <div className="p-4 border-b flex items-center justify-between">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Messages</h2>
+      {/* Mobile Top Profile & Quick Controls Bar */}
+      <div className="sm:hidden flex items-center justify-between border-b bg-muted/30 px-3.5 py-2.5 shrink-0">
+        <button
+          type="button"
+          onClick={() => setIsSettingsOpen(true)}
+          className="flex items-center gap-2.5 rounded-xl p-1 -ml-1 text-left hover:bg-muted/70 active:scale-95 transition-all min-w-0"
+          title="Open User Profile & Settings"
+          aria-label="Open User Profile & Settings"
+        >
+          <div className="relative shrink-0">
+            <Avatar
+              src={user?.avatar}
+              name={user?.name || 'User'}
+              size="sm"
+              className="ring-2 ring-primary/20"
+            />
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-card" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-foreground truncate max-w-[120px]">
+              {user?.name || 'My Profile'}
+            </p>
+            <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+              @{user?.username || 'user'} • Settings
+            </p>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <NotificationBell align="right" />
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95 transition-all"
+            title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle theme"
+          >
+            {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <button
+              type="button"
+              onClick={() => router.push('/admin')}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-primary hover:bg-primary/10 active:scale-95 transition-all"
+              title="Admin Console"
+              aria-label="Admin Console"
+            >
+              <Shield className="h-4 w-4" />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95 transition-all"
+            title="Settings & Privacy"
+            aria-label="Settings and Privacy"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages Header */}
+      <div className="p-3.5 sm:p-4 border-b flex items-center justify-between shrink-0">
+        <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">Messages</h2>
         <Button
           size="sm"
           variant="default"
@@ -65,7 +150,7 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
       </div>
 
       {/* Search Input */}
-      <div className="p-3 border-b">
+      <div className="p-3 border-b shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -79,6 +164,7 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
         {/* Filter Tabs */}
         <div className="mt-2.5 flex items-center gap-1.5">
           <button
+            type="button"
             onClick={() => setFilterType('all')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
               filterType === 'all'
@@ -89,6 +175,7 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
             All
           </button>
           <button
+            type="button"
             onClick={() => setFilterType('private')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
               filterType === 'private'
@@ -99,6 +186,7 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
             <MessageCircle className="h-3 w-3" /> Direct
           </button>
           <button
+            type="button"
             onClick={() => setFilterType('group')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
               filterType === 'group'
@@ -162,4 +250,3 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
     </div>
   );
 }
-
