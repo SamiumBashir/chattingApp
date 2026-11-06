@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,7 +10,6 @@ import { z } from 'zod';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { GoogleSignInButton } from '@/components/shared/GoogleSignInButton';
-import { IsometricAuthIllustration } from '@/components/illustrations/IsometricAuthIllustration';
 
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Please enter your username or email'),
@@ -49,9 +49,18 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-5xl lg:max-w-6xl bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] overflow-hidden grid grid-cols-1 lg:grid-cols-12 border border-white/30 min-h-[580px]">
-      {/* LEFT COLUMN: Isometric 3D Illustration matching reference design */}
-      <div className="hidden lg:flex lg:col-span-7 bg-[#FAFAFE] items-center justify-center relative overflow-hidden border-r border-slate-100/80">
-        <IsometricAuthIllustration />
+      {/* LEFT COLUMN: Vector Chat Illustration requested by user */}
+      <div className="hidden lg:flex lg:col-span-7 bg-[#725CEF] items-center justify-center relative overflow-hidden p-6 lg:p-10 select-none">
+        <div className="relative w-full h-full min-h-[500px] flex items-center justify-center">
+          <Image
+            src="/images/auth-illustration.jpg"
+            alt="Connectly Chat Illustration"
+            fill
+            className="object-contain"
+            priority
+            sizes="(max-width: 1024px) 100vw, 60vw"
+          />
+        </div>
       </div>
 
       {/* RIGHT COLUMN: Clean, Elegant Login Form */}
