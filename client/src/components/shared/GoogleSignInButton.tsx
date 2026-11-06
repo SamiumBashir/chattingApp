@@ -50,7 +50,9 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const buttonContainerRef = useRef<HTMLDivElement>(null);
 
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+  const clientId =
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+    '1059985140649-olcn0thicrmc95ebml1fk3f0jb3liefm.apps.googleusercontent.com';
 
   // Load Google Identity Services Script dynamically if client ID is set
   useEffect(() => {
