@@ -13,6 +13,7 @@ import {
   FileText,
   Download,
   Flag,
+  Mic,
 } from 'lucide-react';
 import { Message } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
@@ -213,6 +214,24 @@ export function MessageBubble({ message, currentUserId, isGroup }: MessageBubble
                         className="max-h-60 w-auto rounded-lg object-cover"
                       />
                     </a>
+                  ) : att.fileType.startsWith('audio/') || att.fileName?.startsWith('voice-') ? (
+                    <div className="my-1.5 w-full min-w-[220px] sm:min-w-[260px] p-2.5 rounded-xl bg-background/60 border border-primary/20 text-foreground">
+                      <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold">
+                        <Mic className="h-3.5 w-3.5 text-primary" />
+                        <span>Voice Message</span>
+                        {att.fileSize && (
+                          <span className="text-[10px] text-muted-foreground font-normal ml-auto">
+                            {(att.fileSize / 1024).toFixed(0)} KB
+                          </span>
+                        )}
+                      </div>
+                      <audio
+                        controls
+                        src={att.url}
+                        className="w-full h-8 rounded-lg"
+                        preload="metadata"
+                      />
+                    </div>
                   ) : (
                     <a
                       href={att.url}

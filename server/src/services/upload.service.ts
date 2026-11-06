@@ -78,7 +78,11 @@ export class UploadService {
     mimeType: string,
     folder = 'connectly/direct'
   ) {
-    const resourceType = mimeType.startsWith('image/') ? 'image' : 'raw';
+    const resourceType = mimeType.startsWith('image/')
+      ? 'image'
+      : mimeType.startsWith('audio/') || mimeType.startsWith('video/')
+      ? 'video'
+      : 'raw';
 
     return new Promise<{
       url: string;
