@@ -409,7 +409,7 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
           </div>
         ) : (
           /* Standard Composer Input Bar */
-          <div className="flex items-center gap-1.5 sm:gap-2 max-w-5xl mx-auto">
+          <div className="flex items-center gap-1 sm:gap-1.5 max-w-5xl mx-auto">
             {/* Hidden dedicated image input (accept="image/*") */}
             <input
               ref={imageInputRef}
@@ -427,7 +427,21 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
               className="hidden"
             />
 
-            {/* 1. Dedicated Image Upload Button */}
+            {/* 1. Dedicated Voice Message Button (Left Side) */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleStartVoice}
+              disabled={isUploading || Boolean(editingMessage)}
+              className="h-9 w-9 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 shrink-0 rounded-full transition-colors"
+              title="Record voice message"
+              aria-label="Record voice message"
+            >
+              <Mic className="h-4.5 w-4.5 text-red-500" />
+            </Button>
+
+            {/* 2. Dedicated Image Upload Button (Left Side) */}
             <Button
               type="button"
               variant="ghost"
@@ -441,7 +455,7 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
               <ImageIcon className="h-4.5 w-4.5 text-emerald-500" />
             </Button>
 
-            {/* 2. Document/File Attachment Button */}
+            {/* 3. Document/File Attachment Button (Left Side) */}
             <Button
               type="button"
               variant="ghost"
@@ -479,20 +493,6 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
                 <Smile className="h-5 w-5" />
               </button>
             </div>
-
-            {/* 3. Dedicated Voice Message Button */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={handleStartVoice}
-              disabled={isUploading || Boolean(editingMessage)}
-              className="h-9 w-9 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 shrink-0 rounded-full transition-colors"
-              title="Record voice message"
-              aria-label="Record voice message"
-            >
-              <Mic className="h-4.5 w-4.5 text-red-500" />
-            </Button>
 
             {/* Send Button */}
             <Button
