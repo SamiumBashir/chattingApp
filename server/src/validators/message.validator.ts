@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
 const attachmentSchema = z.object({
-  url: z.string().url(),
-  secureUrl: z.string().url(),
-  publicId: z.string().min(1),
-  fileName: z.string().min(1),
-  fileType: z.string().min(1),
-  fileSize: z.number().positive(),
+  url: z.string().min(1, 'Attachment URL is required'),
+  secureUrl: z.string().optional().nullable(),
+  publicId: z.string().min(1, 'Public ID is required'),
+  fileName: z.string().min(1, 'File name is required'),
+  fileType: z.string().min(1, 'File type is required'),
+  fileSize: z.number().nonnegative(),
 });
 
 export const sendMessageSchema = z.object({

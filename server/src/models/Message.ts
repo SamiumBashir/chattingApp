@@ -37,7 +37,12 @@ export interface IMessage extends Document {
 const attachmentSchema = new Schema<IAttachment>(
   {
     url: { type: String, required: true },
-    secureUrl: { type: String, required: true },
+    secureUrl: {
+      type: String,
+      default: function () {
+        return (this as any).url;
+      },
+    },
     publicId: { type: String, required: true },
     fileName: { type: String, required: true },
     fileType: { type: String, required: true },

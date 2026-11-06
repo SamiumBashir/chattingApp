@@ -68,20 +68,36 @@ export class MessageService {
       throw new AppError('Message cannot be empty', 400, 'EMPTY_MESSAGE');
     }
 
+    const sanitizedAttachments = attachments.map((att) => ({
+      ...att,
+      secureUrl: att.secureUrl || att.url,
+    }));
+
     const message = await Message.create({
       conversation: new mongoose.Types.ObjectId(input.conversationId),
       sender: new mongoose.Types.ObjectId(senderId),
       clientMessageId: input.clientMessageId,
       content: input.content || '',
       type: input.type || 'text',
-      attachments,
+      attachments: sanitizedAttachments,
       replyTo: input.replyTo ? new mongoose.Types.ObjectId(input.replyTo) : null,
     });
+
+    const firstAtt = sanitizedAttachments[0];
+    const previewContent =
+      message.content ||
+      (firstAtt
+        ? firstAtt.fileType.startsWith('image/')
+          ? '📷 Photo'
+          : firstAtt.fileType.startsWith('audio/') || firstAtt.fileName?.startsWith('voice-')
+          ? '🎤 Voice message'
+          : `📎 ${firstAtt.fileName || 'Attachment'}`
+        : `[${message.type}]`);
 
     // Update conversation cached lastMessage
     conversation.lastMessage = {
       messageId: message._id,
-      content: message.content || `[${message.type}]`,
+      content: previewContent,
       sender: new mongoose.Types.ObjectId(senderId),
       type: message.type,
       createdAt: message.createdAt,

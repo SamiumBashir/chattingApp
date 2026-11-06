@@ -36,7 +36,11 @@ export const uploadService = {
       }
     );
 
-    return res.data.data!.attachment;
+    const att = res.data.data!.attachment;
+    return {
+      ...att,
+      secureUrl: att.secureUrl || att.url,
+    };
   },
 
   /**
@@ -47,7 +51,11 @@ export const uploadService = {
       '/uploads/complete',
       attachment
     );
-    return res.data.data!.attachment;
+    const att = res.data.data!.attachment;
+    return {
+      ...att,
+      secureUrl: att.secureUrl || att.url,
+    };
   },
 
   /**

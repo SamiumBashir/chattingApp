@@ -86,6 +86,7 @@ export class UploadService {
 
     return new Promise<{
       url: string;
+      secureUrl: string;
       publicId: string;
       fileName: string;
       fileType: string;
@@ -108,6 +109,7 @@ export class UploadService {
               const fallbackId = `fallback_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
               return resolve({
                 url: dataUrl,
+                secureUrl: dataUrl,
                 publicId: fallbackId,
                 fileName,
                 fileType: mimeType,
@@ -124,7 +126,8 @@ export class UploadService {
           }
 
           resolve({
-            url: result.secure_url,
+            url: result.secure_url || result.url,
+            secureUrl: result.secure_url || result.url,
             publicId: result.public_id,
             fileName,
             fileType: mimeType,

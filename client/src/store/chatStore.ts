@@ -315,6 +315,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : 'file'
         : 'text');
 
+    const sanitizedAttachments: Attachment[] = (attachments || []).map((att) => ({
+      url: att.url,
+      secureUrl: att.secureUrl || att.url,
+      publicId: att.publicId || `att-${Date.now()}`,
+      fileName: att.fileName || 'file',
+      fileType: att.fileType || 'application/octet-stream',
+      fileSize: att.fileSize || 0,
+    }));
+
     const optimisticMessage: Message = {
       id: `temp-${clientMessageId}`,
       conversation: conversationId,
@@ -322,7 +331,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       clientMessageId,
       content,
       type: resolvedType,
-      attachments: attachments || [],
+      attachments: sanitizedAttachments,
       reactions: [],
       replyTo: replyMessage || undefined,
       isEdited: false,
@@ -352,7 +361,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clientMessageId,
           content,
           type: resolvedType,
-          attachments: attachments || [],
+          attachments: sanitizedAttachments,
           replyTo: replyToId || (replyMessage ? replyMessage.id : null),
         },
         (response: { success: boolean; message?: Message; error?: string }) => {
@@ -369,7 +378,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           clientMessageId,
           content,
           type: resolvedType,
-          attachments: attachments || [],
+          attachments: sanitizedAttachments,
           replyTo: replyToId || (replyMessage ? replyMessage.id : null),
         });
         get().updateMessageStatus(conversationId, clientMessageId, 'sent', persisted);
