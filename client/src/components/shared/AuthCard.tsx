@@ -196,7 +196,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
             fill
             className="object-contain"
             priority
-            sizes="(max-width: 640px) 380px, (max-width: 1024px) 500px, 686px"
+            unoptimized
           />
         </div>
       </div>
@@ -217,7 +217,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
             type="button"
             onClick={() => handleSwitch('login')}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-lg relative z-10 transition-colors duration-300 ${
-              mode === 'login' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-900'
+              mode === 'login' ? 'text-slate-900' : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Sign In
@@ -226,7 +226,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
             type="button"
             onClick={() => handleSwitch('register')}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-lg relative z-10 transition-colors duration-300 ${
-              mode === 'register' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-900'
+              mode === 'register' ? 'text-slate-900' : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Create Account
@@ -373,8 +373,9 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     handleSwitch('register');
                   }}
                   className="font-semibold text-[#5850EC] hover:text-[#4338CA] hover:underline cursor-pointer"
+                  aria-label="Create a new Connectly account"
                 >
-                  Click here
+                  Create an account
                 </a>
               </p>
             </div>
@@ -552,8 +553,9 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     handleSwitch('login');
                   }}
                   className="font-semibold text-[#5850EC] hover:text-[#4338CA] hover:underline cursor-pointer"
+                  aria-label="Sign in to your Connectly account"
                 >
-                  Sign in
+                  Sign in instead
                 </a>
               </p>
             </div>

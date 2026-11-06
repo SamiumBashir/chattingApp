@@ -15,8 +15,10 @@ export const setAccessToken = (token: string | null): void => {
   if (typeof window !== 'undefined') {
     if (token) {
       localStorage.setItem('connectly_access_token', token);
+      document.cookie = 'connectly_logged_in=1; path=/; max-age=2592000; SameSite=Lax';
     } else {
       localStorage.removeItem('connectly_access_token');
+      document.cookie = 'connectly_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     }
   }
 };

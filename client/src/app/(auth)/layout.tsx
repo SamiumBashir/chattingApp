@@ -21,9 +21,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* Main Content Area */}
-      <div className="w-full flex items-center justify-center relative z-10 my-auto">
+      <main className="w-full flex items-center justify-center relative z-10 my-auto">
         {children}
-      </div>
+      </main>
     </div>
   );
 }
