@@ -1,7 +1,9 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { AuthenticatedSocket, socketAuthMiddleware } from './socketAuth.middleware.js';
 import { MessageService } from '../services/message.service.js';
+import { ConversationService } from '../services/conversation.service.js';
 import { Conversation } from '../models/Conversation.js';
+import { Notification } from '../models/Notification.js';
 import { logger } from '../utils/logger.js';
 import { sendMessageSchema } from '../validators/message.validator.js';
 
@@ -174,15 +176,36 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       try {
         if (data.messageId) {
           await MessageService.markRead(data.messageId, userId);
+          // Mark notification as read
+          await Notification.updateOne(
+            { recipient: userId, message: data.messageId, isRead: false },
+            { $set: { isRead: true } }
+          );
           io.to(`conversation:${data.conversationId}`).emit('message:status', {
             messageId: data.messageId,
             conversationId: data.conversationId,
             userId,
             status: 'read',
           });
+          const unreadCount = await Notification.countDocuments({
+            recipient: userId,
+            isRead: false,
+          });
+          io.to(`user:${userId}`).emit('notification:count', { unreadCount });
         }
       } catch (err) {
         logger.debug('Error marking message read:', err);
+      }
+    });
+
+    // Entire conversation read acknowledgment
+    socket.on('conversation:read', async (data: { conversationId: string }) => {
+      try {
+        if (data?.conversationId) {
+          await ConversationService.markConversationRead(data.conversationId, userId);
+        }
+      } catch (err) {
+        logger.debug('Error in conversation:read handler:', err);
       }
     });
 

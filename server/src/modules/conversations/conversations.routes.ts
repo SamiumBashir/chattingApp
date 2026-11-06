@@ -9,6 +9,7 @@ import {
   addMembers,
   removeMember,
   leaveGroup,
+  markConversationRead,
 } from './conversations.controller.js';
 import { authenticate } from '../../middlewares/auth.js';
 import { validateRequest } from '../../middlewares/validate.js';
@@ -32,6 +33,7 @@ router.delete('/:id', deleteConversation);
 router.post('/:id/members', validateRequest({ body: addMembersSchema }), addMembers);
 router.delete('/:id/members/:userId', removeMember);
 router.post('/:id/leave', leaveGroup);
+router.post('/:id/read', markConversationRead);
 
 export default router;
 

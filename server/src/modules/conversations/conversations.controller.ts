@@ -136,3 +136,17 @@ export const leaveGroup = async (
   }
 };
 
+export const markConversationRead = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const result = await ConversationService.markConversationRead(id, req.user!.userId);
+    sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+};
+

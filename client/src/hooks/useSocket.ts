@@ -5,6 +5,7 @@ import { connectSocket, disconnectSocket } from '../lib/socket';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { playNotificationSound, showDesktopNotification } from '../lib/sound';
 import { Message, Reaction, Notification } from '../types';
 
 export function useSocket() {
@@ -31,13 +32,32 @@ export function useSocket() {
     const handleNewMessage = (message: Message) => {
       addMessage(message.conversation, message);
 
-      if (
-        message.conversation === activeConversationId &&
-        message.sender?.id !== user.id
-      ) {
+      const isCurrentConversation = message.conversation === activeConversationId;
+      const isWindowFocused = typeof document !== 'undefined' && document.hasFocus();
+
+      // If user is actively inside this conversation and window is focused:
+      if (isCurrentConversation && isWindowFocused && message.sender?.id !== user.id) {
         socket.emit('message:read', {
           messageId: message.id,
           conversationId: message.conversation,
+        });
+        // Conversation is read, clear notifications for this conversation
+        useNotificationStore.getState().markConversationNotificationsAsRead(message.conversation);
+      } else if (message.sender?.id !== user.id) {
+        // Message is unread! (Different conversation or window is in background)
+        // 1. Increment unread counter on that conversation
+        useChatStore.getState().incrementUnread(message.conversation);
+
+        // 2. Play gentle audio chime if user enabled sound
+        if (useNotificationStore.getState().soundEnabled) {
+          playNotificationSound();
+        }
+
+        // 3. Native desktop notification if permitted
+        const senderName = message.sender?.name || message.sender?.username || 'New message';
+        const snippet = message.content || (message.attachments?.length ? 'Sent an attachment' : 'New message');
+        showDesktopNotification(senderName, snippet, () => {
+          useChatStore.getState().setActiveConversation(message.conversation);
         });
       }
     };
@@ -159,6 +179,22 @@ export function useSocket() {
       useNotificationStore.setState({ unreadCount: data.unreadCount });
     };
 
+    const handleConversationRead = (data: { conversationId: string; userId: string }) => {
+      if (data.userId !== user.id) {
+        const state = useChatStore.getState();
+        const currentList = state.messagesByConversation[data.conversationId] || [];
+        const updated = currentList.map((m) =>
+          m.status !== 'read' ? { ...m, status: 'read' as const } : m
+        );
+        useChatStore.setState((s) => ({
+          messagesByConversation: {
+            ...s.messagesByConversation,
+            [data.conversationId]: updated,
+          },
+        }));
+      }
+    };
+
     socket.on('message:new', handleNewMessage);
     socket.on('message:status', handleMessageStatus);
     socket.on('typing:update', handleTypingUpdate);
@@ -167,6 +203,7 @@ export function useSocket() {
     socket.on('message:edited', handleMessageEdited);
     socket.on('message:deleted', handleMessageDeleted);
     socket.on('message:reaction-updated', handleReactionUpdated);
+    socket.on('conversation:read', handleConversationRead);
     socket.on('notification:new', handleNewNotification);
     socket.on('notification:read', handleNotificationRead);
     socket.on('notification:count', handleNotificationCount);
@@ -203,6 +240,7 @@ export function useSocket() {
       socket.off('message:edited', handleMessageEdited);
       socket.off('message:deleted', handleMessageDeleted);
       socket.off('message:reaction-updated', handleReactionUpdated);
+      socket.off('conversation:read', handleConversationRead);
       socket.off('notification:new', handleNewNotification);
       socket.off('notification:read', handleNotificationRead);
       socket.off('notification:count', handleNotificationCount);

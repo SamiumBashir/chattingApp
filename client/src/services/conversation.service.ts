@@ -68,5 +68,9 @@ export const conversationService = {
   async leaveGroup(id: string): Promise<void> {
     await apiClient.post(`/conversations/${id}/leave`);
   },
+
+  async markAsRead(id: string): Promise<void> {
+    await apiClient.post(`/conversations/${id}/read`);
+  },
 };
 

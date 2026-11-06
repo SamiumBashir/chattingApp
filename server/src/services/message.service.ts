@@ -6,6 +6,7 @@ import { User } from '../models/User.js';
 import { AppError } from '../utils/apiResponse.js';
 import { SendMessageInput } from '../validators/message.validator.js';
 import { NotificationService } from './notification.service.js';
+import { getSocketGateway, activeUserSockets } from '../sockets/socketGateway.js';
 
 export class MessageService {
   /**
@@ -110,24 +111,44 @@ export class MessageService {
       await message.populate('replyTo', 'content sender type');
     }
 
-    // Generate notifications for other participants
+    // Generate notifications for other participants ONLY if they are not actively in the conversation
     otherParticipantIds.forEach((recipientId) => {
-      NotificationService.createNotification({
-        recipientId,
-        actorId: senderId,
-        type: 'message',
-        conversationId: conversation._id.toString(),
-        messageId: message._id.toString(),
-        title:
-          conversation.type === 'group'
-            ? `${(message.sender as any)?.name || 'Someone'} in ${conversation.groupName || 'Group'}`
-            : (message.sender as any)?.name || 'New Message',
-        body: message.content
-          ? message.content.length > 60
-            ? `${message.content.slice(0, 60)}...`
-            : message.content
-          : 'Sent an attachment',
-      }).catch(() => {});
+      let isRecipientActiveInRoom = false;
+      try {
+        const gateway = getSocketGateway();
+        if (gateway) {
+          const roomSockets = gateway.sockets.adapter.rooms.get(`conversation:${conversation._id.toString()}`);
+          const recipientSockets = activeUserSockets.get(recipientId);
+          if (roomSockets && recipientSockets) {
+            for (const sId of recipientSockets) {
+              if (roomSockets.has(sId)) {
+                isRecipientActiveInRoom = true;
+                break;
+              }
+            }
+          }
+        }
+      } catch {}
+
+      // Only create unread notification when recipient is not currently inside the chat room
+      if (!isRecipientActiveInRoom) {
+        NotificationService.createNotification({
+          recipientId,
+          actorId: senderId,
+          type: 'message',
+          conversationId: conversation._id.toString(),
+          messageId: message._id.toString(),
+          title:
+            conversation.type === 'group'
+              ? `${(message.sender as any)?.name || 'Someone'} in ${conversation.groupName || 'Group'}`
+              : (message.sender as any)?.name || 'New Message',
+          body: message.content
+            ? message.content.length > 60
+              ? `${message.content.slice(0, 60)}...`
+              : message.content
+            : 'Sent an attachment',
+        }).catch(() => {});
+      }
     });
 
     return {

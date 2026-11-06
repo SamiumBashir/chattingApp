@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 import { Conversation, IParticipant } from '../models/Conversation.js';
 import { User } from '../models/User.js';
+import { Message } from '../models/Message.js';
+import { MessageReceipt } from '../models/MessageReceipt.js';
+import { Notification } from '../models/Notification.js';
 import { AppError } from '../utils/apiResponse.js';
+import { getSocketGateway } from '../sockets/socketGateway.js';
 import {
   CreateGroupConversationInput,
   UpdateGroupInput,
@@ -136,8 +140,35 @@ export class ConversationService {
       Conversation.countDocuments(query),
     ]);
 
+    // Aggregate unread message receipts for each conversation for this user
+    const conversationIds = conversations.map((c) => c._id);
+    const unreadCounts = await MessageReceipt.aggregate([
+      {
+        $match: {
+          conversation: { $in: conversationIds },
+          user: new mongoose.Types.ObjectId(currentUserId),
+          status: { $ne: 'read' },
+        },
+      },
+      {
+        $group: {
+          _id: '$conversation',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const unreadMap = new Map<string, number>();
+    unreadCounts.forEach((u) => unreadMap.set(u._id.toString(), u.count));
+
+    const conversationsWithUnread = conversations.map((c) => {
+      const json: any = c.toJSON();
+      json.unreadCount = unreadMap.get(c._id.toString()) || 0;
+      return json;
+    });
+
     return {
-      conversations: conversations.map((c) => c.toJSON()),
+      conversations: conversationsWithUnread,
       meta: {
         page,
         limit,
@@ -163,7 +194,15 @@ export class ConversationService {
       throw new AppError('You are not a participant in this conversation', 403, 'FORBIDDEN');
     }
 
-    return conversation.toJSON();
+    const unreadCount = await MessageReceipt.countDocuments({
+      conversation: conversation._id,
+      user: new mongoose.Types.ObjectId(currentUserId),
+      status: { $ne: 'read' },
+    });
+
+    const json: any = conversation.toJSON();
+    json.unreadCount = unreadCount;
+    return json;
   }
 
   /**
@@ -323,5 +362,74 @@ export class ConversationService {
 
     await conversation.save();
     return { left: true };
+  }
+
+  /**
+   * Mark all messages and notifications in a conversation as read for a user
+   */
+  static async markConversationRead(conversationId: string, currentUserId: string) {
+    if (!mongoose.Types.ObjectId.isValid(conversationId) || !mongoose.Types.ObjectId.isValid(currentUserId)) {
+      return { success: false };
+    }
+    const convObjId = new mongoose.Types.ObjectId(conversationId);
+    const userObjId = new mongoose.Types.ObjectId(currentUserId);
+
+    // 1. Mark receipts as read
+    await MessageReceipt.updateMany(
+      {
+        conversation: convObjId,
+        user: userObjId,
+        status: { $ne: 'read' },
+      },
+      {
+        $set: { status: 'read', readAt: new Date() },
+      }
+    );
+
+    // 2. Update participant's lastReadMessage
+    const latestMessage = await Message.findOne({
+      conversation: convObjId,
+      isDeleted: false,
+    })
+      .sort({ createdAt: -1 })
+      .select('_id');
+
+    if (latestMessage) {
+      await Conversation.updateOne(
+        { _id: convObjId, 'participants.user': userObjId },
+        { $set: { 'participants.$.lastReadMessage': latestMessage._id } }
+      );
+    }
+
+    // 3. Mark all notifications for this conversation as read
+    await Notification.updateMany(
+      {
+        recipient: userObjId,
+        conversation: convObjId,
+        isRead: false,
+      },
+      {
+        $set: { isRead: true },
+      }
+    );
+
+    // 4. Socket dispatch for real-time sync across devices and peers
+    try {
+      const gateway = getSocketGateway();
+      if (gateway) {
+        gateway.to(`conversation:${conversationId}`).emit('conversation:read', {
+          conversationId,
+          userId: currentUserId,
+        });
+
+        const unreadCount = await Notification.countDocuments({
+          recipient: userObjId,
+          isRead: false,
+        });
+        gateway.to(`user:${currentUserId}`).emit('notification:count', { unreadCount });
+      }
+    } catch {}
+
+    return { success: true };
   }
 }

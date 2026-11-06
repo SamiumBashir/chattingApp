@@ -40,6 +40,8 @@ interface ChatState {
   fetchConversations: () => Promise<void>;
   upsertConversation: (conversation: Conversation) => void;
   removeConversation: (id: string) => void;
+  markConversationAsRead: (id: string) => void;
+  incrementUnread: (id: string) => void;
 
   // Message actions
   fetchMessages: (conversationId: string, loadMore?: boolean) => Promise<void>;
@@ -112,7 +114,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const found = get().conversations.find((c) => c.id === id) || null;
     set({
       activeConversationId: id,
-      activeConversation: found,
+      activeConversation: found ? { ...found, unreadCount: 0 } : null,
       replyingToMessage: null,
       editingMessage: null,
     });
@@ -122,9 +124,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       socket.emit('conversation:join', { conversationId: id });
     }
 
+    // Automatically mark conversation as read
+    get().markConversationAsRead(id);
+
     if (!get().messagesByConversation[id]) {
       get().fetchMessages(id);
     }
+  },
+
+  markConversationAsRead: (conversationId: string) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId ? { ...c, unreadCount: 0 } : c
+      ),
+      activeConversation:
+        state.activeConversation?.id === conversationId
+          ? { ...state.activeConversation, unreadCount: 0 }
+          : state.activeConversation,
+    }));
+
+    const socket = getSocket();
+    if (socket && socket.connected) {
+      socket.emit('conversation:read', { conversationId });
+    }
+    conversationService.markAsRead(conversationId).catch(() => {});
+  },
+
+  incrementUnread: (conversationId: string) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId
+          ? { ...c, unreadCount: (c.unreadCount || 0) + 1 }
+          : c
+      ),
+    }));
   },
 
   setSearchTerm: (searchTerm) => set({ searchTerm }),
@@ -229,8 +262,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const conv = get().conversations.find((c) => c.id === conversationId);
     if (conv) {
+      const isActive = get().activeConversationId === conversationId;
       get().upsertConversation({
         ...conv,
+        unreadCount: isActive ? 0 : conv.unreadCount,
         lastMessage: {
           messageId: message.id,
           content: message.content,

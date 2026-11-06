@@ -27,6 +27,7 @@ export interface IConversation extends Document {
   createdBy: mongoose.Types.ObjectId;
   lastMessage?: ILastMessageCached | null;
   isArchived: boolean;
+  unreadCount?: number;
   createdAt: Date;
   updatedAt: Date;
   hasParticipant(userId: string | mongoose.Types.ObjectId): boolean;
