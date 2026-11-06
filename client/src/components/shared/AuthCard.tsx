@@ -65,7 +65,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [regServerError, setRegServerError] = useState<string | null>(null);
 
-  // Sync mode when pathname changes (e.g. browser back/forward)
+  // Sync mode when pathname changes (e.g. browser back/forward or direct route)
   useEffect(() => {
     if (pathname?.includes('register')) {
       setMode('register');
@@ -74,7 +74,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
     }
   }, [pathname]);
 
-  // Listen to popstate for smooth slide on browser Back/Forward
+  // Listen to popstate for smooth sliding on browser Back/Forward
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
@@ -153,7 +153,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
   };
 
   return (
-    <div className="w-full max-w-5xl lg:max-w-6xl bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] overflow-hidden border border-white/30 relative min-h-[580px] lg:h-[660px]">
+    <div className="w-full max-w-md sm:max-w-lg lg:max-w-5xl xl:max-w-6xl mx-auto bg-white rounded-2xl sm:rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] overflow-hidden border border-white/30 relative h-auto lg:h-[660px]">
       {/* ------------------------------------------------------------------ */}
       {/* DESKTOP SLIDING ILLUSTRATION PANEL (Width: 58.333% = 7 cols of 12) */}
       {/* ------------------------------------------------------------------ */}
@@ -176,45 +176,71 @@ export function AuthCard({ initialMode }: AuthCardProps) {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* REGISTER FORM PANEL (Positioned on the LEFT side)                  */}
+      {/* REGISTER FORM PANEL                                                */}
       {/* ------------------------------------------------------------------ */}
       <div
-        className={`w-full lg:w-[41.666667%] lg:left-0 lg:top-0 lg:bottom-0 lg:h-full lg:absolute p-8 sm:p-10 lg:p-10 flex flex-col justify-between bg-white overflow-y-auto transition-all duration-500 ${
+        className={`w-full lg:w-[41.666667%] lg:left-0 lg:top-0 lg:bottom-0 lg:h-full lg:absolute p-6 sm:p-8 lg:p-10 flex flex-col justify-between bg-white overflow-y-auto transition-all duration-500 ${
           mode === 'register'
-            ? 'opacity-100 translate-x-0 pointer-events-auto z-10 delay-150'
-            : 'opacity-0 -translate-x-8 pointer-events-none lg:pointer-events-none hidden lg:flex'
+            ? 'flex opacity-100 translate-x-0 pointer-events-auto z-10 lg:delay-150'
+            : 'hidden lg:flex opacity-0 -translate-x-8 pointer-events-none'
         }`}
       >
         <div>
+          {/* Mobile Tab Switcher */}
+          <div className="flex lg:hidden bg-slate-100 p-1 rounded-xl mb-5 select-none">
+            <button
+              type="button"
+              onClick={() => handleSwitch('login')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                mode === 'login'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitch('register')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                mode === 'register'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+
           {/* Header Typography */}
-          <div className="mb-5">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
+          <div className="mb-4 sm:mb-5">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
               Create,
             </h1>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
               Your account
             </h2>
-            <p className="text-xs text-slate-500 mt-1.5">
+            <p className="text-xs text-slate-500 mt-1">
               Join Connectly and start messaging in real-time
             </p>
           </div>
 
           {/* Error Message */}
           {regServerError && (
-            <div className="mb-4 rounded-lg bg-red-50 p-2.5 text-xs font-medium text-red-600 border border-red-200">
+            <div className="mb-3.5 rounded-lg bg-red-50 p-2.5 text-xs font-medium text-red-600 border border-red-200">
               {regServerError}
             </div>
           )}
 
           {/* Register Form */}
-          <form onSubmit={handleRegSubmit(onRegSubmit)} className="space-y-3.5">
+          <form onSubmit={handleRegSubmit(onRegSubmit)} className="space-y-3 sm:space-y-3.5">
             {/* Full Name */}
             <div>
               <input
                 type="text"
                 placeholder="Full name"
                 autoComplete="name"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...regFormRegister('name')}
               />
               {regErrors.name && (
@@ -228,7 +254,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 type="text"
                 placeholder="Username (e.g. alex_j)"
                 autoComplete="username"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...regFormRegister('username')}
               />
               {regErrors.username && (
@@ -242,7 +268,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 type="email"
                 placeholder="Email address"
                 autoComplete="email"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...regFormRegister('email')}
               />
               {regErrors.email && (
@@ -256,13 +282,13 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 type={showRegPassword ? 'text' : 'password'}
                 placeholder="Password"
                 autoComplete="new-password"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 pr-8 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...regFormRegister('password')}
               />
               <button
                 type="button"
                 onClick={() => setShowRegPassword(!showRegPassword)}
-                className="absolute right-0 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-0 top-1.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                 aria-label={showRegPassword ? 'Hide password' : 'Show password'}
               >
                 {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -294,13 +320,13 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="Confirm password"
                 autoComplete="new-password"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 pr-8 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...regFormRegister('confirmPassword')}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-0 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-0 top-1.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                 aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
               >
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -314,7 +340,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-[#5850EC] hover:bg-[#4338CA] text-white font-medium py-2.5 rounded-lg text-sm shadow-[0_4px_14px_rgba(88,80,236,0.35)] hover:shadow-[0_6px_20px_rgba(88,80,236,0.45)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-1"
+              className="w-full bg-[#5850EC] hover:bg-[#4338CA] text-white font-medium py-2.5 rounded-lg text-sm shadow-[0_4px_14px_rgba(88,80,236,0.35)] hover:shadow-[0_6px_20px_rgba(88,80,236,0.45)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
             >
               {isLoading ? (
                 <>
@@ -336,7 +362,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           </div>
 
           {/* Sign In Redirect Link with smooth sliding switch */}
-          <p className="text-center text-xs text-slate-500 mt-4">
+          <p className="text-center text-xs text-slate-500 mt-4 pb-1">
             Already have an account?{' '}
             <a
               href="/login"
@@ -353,42 +379,68 @@ export function AuthCard({ initialMode }: AuthCardProps) {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* LOGIN FORM PANEL (Positioned on the RIGHT side)                   */}
+      {/* LOGIN FORM PANEL                                                   */}
       {/* ------------------------------------------------------------------ */}
       <div
-        className={`w-full lg:w-[41.666667%] lg:right-0 lg:top-0 lg:bottom-0 lg:h-full lg:absolute p-8 sm:p-12 lg:p-12 flex flex-col justify-between bg-white overflow-y-auto transition-all duration-500 ${
+        className={`w-full lg:w-[41.666667%] lg:right-0 lg:top-0 lg:bottom-0 lg:h-full lg:absolute p-6 sm:p-8 lg:p-12 flex flex-col justify-between bg-white overflow-y-auto transition-all duration-500 ${
           mode === 'login'
-            ? 'opacity-100 translate-x-0 pointer-events-auto z-10 delay-150'
-            : 'opacity-0 translate-x-8 pointer-events-none lg:pointer-events-none hidden lg:flex'
+            ? 'flex opacity-100 translate-x-0 pointer-events-auto z-10 lg:delay-150'
+            : 'hidden lg:flex opacity-0 translate-x-8 pointer-events-none'
         }`}
       >
         <div>
+          {/* Mobile Tab Switcher */}
+          <div className="flex lg:hidden bg-slate-100 p-1 rounded-xl mb-6 select-none">
+            <button
+              type="button"
+              onClick={() => handleSwitch('login')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                mode === 'login'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitch('register')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                mode === 'register'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+
           {/* Header Typography */}
-          <div className="mb-8">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
+          <div className="mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
               Hello,
             </h1>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
               Welcome back
             </h2>
           </div>
 
           {/* Error Message */}
           {loginServerError && (
-            <div className="mb-5 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200">
+            <div className="mb-4 sm:mb-5 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200">
               {loginServerError}
             </div>
           )}
 
           {/* Form Fields */}
-          <form onSubmit={handleLoginSubmit(onLoginSubmit)} className="space-y-6">
+          <form onSubmit={handleLoginSubmit(onLoginSubmit)} className="space-y-4 sm:space-y-6">
             {/* Username or email input */}
             <div>
               <input
                 type="text"
                 placeholder="Username or email"
                 autoComplete="username"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-3 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2.5 sm:py-3 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...loginFormRegister('identifier')}
               />
               {loginErrors.identifier && (
@@ -402,13 +454,13 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 type={showLoginPassword ? 'text' : 'password'}
                 placeholder="Password"
                 autoComplete="current-password"
-                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-3 pr-10 text-slate-800 placeholder:text-slate-400 text-sm transition-colors outline-hidden bg-transparent"
+                className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2.5 sm:py-3 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                 {...loginFormRegister('password')}
               />
               <button
                 type="button"
                 onClick={() => setShowLoginPassword(!showLoginPassword)}
-                className="absolute right-0 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-0 top-2 sm:top-2.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                 aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
               >
                 {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -420,7 +472,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
 
             {/* Remember me & Forgot password */}
             <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
+              <label className="flex items-center gap-2 cursor-pointer select-none py-1">
                 <input
                   type="checkbox"
                   checked={rememberMe}
@@ -432,7 +484,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
 
               <Link
                 href="/forgot-password"
-                className="text-xs text-slate-500 hover:text-slate-800 transition-colors"
+                className="text-xs text-slate-500 hover:text-slate-800 transition-colors py-1"
               >
                 Forgot password?
               </Link>
@@ -464,7 +516,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           </div>
 
           {/* Sign Up Redirect Link with smooth sliding switch */}
-          <p className="text-center text-xs text-slate-500 mt-5">
+          <p className="text-center text-xs text-slate-500 mt-5 pb-1">
             Don&apos;t have an account?{' '}
             <a
               href="/register"
