@@ -23,7 +23,6 @@ import { ConversationList } from '@/features/conversations/ConversationList';
 import { ConversationHeader } from '@/features/conversations/ConversationHeader';
 import { ConversationDetails } from '@/features/conversations/ConversationDetails';
 import { NewConversationModal } from '@/features/conversations/NewConversationModal';
-import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { MessageSearchModal } from '@/features/search/MessageSearchModal';
 import { UserSettingsModal } from '@/features/profile/UserSettingsModal';
 import { CallProvider } from '@/features/call/CallContext';
@@ -127,7 +126,6 @@ export default function ChatPage() {
             >
               <Plus className="h-5 w-5" />
             </button>
-            <NotificationBell />
             {(user.role === 'admin' || user.role === 'superadmin') && (
               <button
                 onClick={() => router.push('/admin')}

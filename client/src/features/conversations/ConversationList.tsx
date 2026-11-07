@@ -20,7 +20,6 @@ import { ConversationItem } from './ConversationItem';
 import { useChatStore } from '@/store/chatStore';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/lib/theme';
-import { NotificationBell } from '@/features/notifications/NotificationBell';
 
 interface ConversationListProps {
   currentUserId: string;
@@ -100,8 +99,6 @@ export function ConversationList({ currentUserId }: ConversationListProps) {
         </button>
 
         <div className="flex items-center gap-1 shrink-0">
-          <NotificationBell align="right" />
-
           <button
             type="button"
             onClick={toggleTheme}
