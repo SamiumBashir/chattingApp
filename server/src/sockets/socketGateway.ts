@@ -1,8 +1,10 @@
 import { Server as SocketIOServer } from 'socket.io';
+import { z } from 'zod';
 import { AuthenticatedSocket, socketAuthMiddleware } from './socketAuth.middleware.js';
 import { MessageService } from '../services/message.service.js';
 import { ConversationService } from '../services/conversation.service.js';
 import { Conversation } from '../models/Conversation.js';
+import { User } from '../models/User.js';
 import { Notification } from '../models/Notification.js';
 import { logger } from '../utils/logger.js';
 import { sendMessageSchema } from '../validators/message.validator.js';
@@ -13,6 +15,33 @@ export const activeUserSockets = new Map<string, Set<string>>();
 // In-memory map for ephemeral typing timeouts per conversation per user
 // Key: `${conversationId}_${userId}`
 const typingTimeouts = new Map<string, NodeJS.Timeout>();
+
+// Active 1-on-1 WebRTC Call Sessions tracking for authorization and cleanup
+export interface ActiveCallSession {
+  callId: string;
+  callerId: string;
+  recipientId: string;
+  conversationId: string;
+  callType: 'audio' | 'video';
+  status: 'ringing' | 'connected';
+  startedAt: Date;
+}
+
+export const activeCalls = new Map<string, ActiveCallSession>(); // callId -> ActiveCallSession
+export const userCallMap = new Map<string, string>(); // userId -> callId
+
+// WebRTC Signaling payload validation schemas
+const sdpSchema = z.object({
+  type: z.enum(['offer', 'answer', 'pranswer', 'rollback']),
+  sdp: z.string().min(1).max(200000),
+});
+
+const iceCandidateSchema = z.object({
+  candidate: z.string().optional(),
+  sdpMid: z.string().nullable().optional(),
+  sdpMLineIndex: z.number().nullable().optional(),
+  usernameFragment: z.string().nullable().optional(),
+});
 
 let globalIo: SocketIOServer | null = null;
 
@@ -81,6 +110,9 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
 
     // Typing Indicators (Ephemeral - no database writes)
     socket.on('typing:start', (data: { conversationId: string }) => {
+      if (!data?.conversationId) return;
+      if (!socket.rooms.has(`conversation:${data.conversationId}`)) return;
+
       const key = `${data.conversationId}_${userId}`;
 
       // Clear existing timeout if present
@@ -111,6 +143,7 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     });
 
     socket.on('typing:stop', (data: { conversationId: string }) => {
+      if (!data?.conversationId) return;
       const key = `${data.conversationId}_${userId}`;
       if (typingTimeouts.has(key)) {
         clearTimeout(typingTimeouts.get(key)!);
@@ -259,51 +292,110 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     );
 
     // ==========================================
-    // WebRTC 1-on-1 Audio & Video Calling
+    // WebRTC 1-on-1 Audio & Video Calling (Secured & Validated)
     // ==========================================
 
     // 1. Initiate an outgoing call
     socket.on(
       'call:initiate',
-      (
+      async (
         data: {
           recipientId: string;
           conversationId: string;
           callType: 'audio' | 'video';
-          caller?: {
-            id: string;
-            name: string;
-            avatar?: string;
-            username: string;
-          };
         },
         callback
       ) => {
         try {
-          const isOnline = activeUserSockets.has(data.recipientId);
-          if (!isOnline) {
-            if (typeof callback === 'function') {
-              callback({ success: false, reason: 'offline' });
-            }
+          if (!data?.recipientId || !data?.conversationId || !data?.callType) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Invalid call payload' });
             return;
           }
 
+          if (data.recipientId === userId) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Cannot call yourself' });
+            return;
+          }
+
+          // Check if recipient is online
+          const isOnline = activeUserSockets.has(data.recipientId);
+          if (!isOnline) {
+            if (typeof callback === 'function') callback({ success: false, reason: 'offline' });
+            return;
+          }
+
+          // Check if caller or recipient is already in a call
+          if (userCallMap.has(userId) || userCallMap.has(data.recipientId)) {
+            if (typeof callback === 'function') callback({ success: false, reason: 'busy' });
+            return;
+          }
+
+          // Verify conversation exists and both users are authorized members
+          const conversation = await Conversation.findById(data.conversationId);
+          if (
+            !conversation ||
+            !conversation.hasParticipant(userId) ||
+            !conversation.hasParticipant(data.recipientId)
+          ) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized conversation participant' });
+            return;
+          }
+
+          // Verify user blocking status
+          const [callerDoc, recipientDoc] = await Promise.all([
+            User.findById(userId),
+            User.findById(data.recipientId),
+          ]);
+
+          if (!callerDoc || !recipientDoc) {
+            if (typeof callback === 'function') callback({ success: false, error: 'User not found' });
+            return;
+          }
+
+          const isBlockedByCaller = callerDoc.blockedUsers?.some((id) => id.toString() === data.recipientId);
+          const isBlockedByRecipient = recipientDoc.blockedUsers?.some((id) => id.toString() === userId);
+          if (isBlockedByCaller || isBlockedByRecipient) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Call blocked' });
+            return;
+          }
+
+          // Server-verified caller profile (derived from authenticated session and database)
+          const verifiedCaller = {
+            id: userId,
+            name: callerDoc.name || user.username,
+            username: callerDoc.username || user.username,
+            avatar: callerDoc.avatar,
+          };
+
+          const callId = `call_${Date.now()}_${userId}_${data.recipientId}`;
+          const session: ActiveCallSession = {
+            callId,
+            callerId: userId,
+            recipientId: data.recipientId,
+            conversationId: data.conversationId,
+            callType: data.callType,
+            status: 'ringing',
+            startedAt: new Date(),
+          };
+
+          activeCalls.set(callId, session);
+          userCallMap.set(userId, callId);
+          userCallMap.set(data.recipientId, callId);
+
           // Emit incoming call to recipient's personal room
           io.to(`user:${data.recipientId}`).emit('call:incoming', {
+            callId,
             callerId: userId,
-            caller: data.caller || {
-              id: userId,
-              name: user.username,
-              username: user.username,
-            },
+            caller: verifiedCaller,
             conversationId: data.conversationId,
             callType: data.callType,
           });
 
           if (typeof callback === 'function') {
-            callback({ success: true });
+            callback({ success: true, callId });
           }
         } catch (err: any) {
+          logger.error('Error initiating call:', err);
           if (typeof callback === 'function') {
             callback({ success: false, error: err.message });
           }
@@ -315,59 +407,166 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     socket.on(
       'call:answer',
       (data: { callerId: string; conversationId: string; callType: 'audio' | 'video' }) => {
-        io.to(`user:${data.callerId}`).emit('call:accepted', {
-          recipientId: userId,
-          conversationId: data.conversationId,
-          callType: data.callType,
-        });
+        const callId = userCallMap.get(userId);
+        const session = callId ? activeCalls.get(callId) : null;
+
+        if (session && session.recipientId === userId && session.callerId === data.callerId) {
+          session.status = 'connected';
+          io.to(`user:${session.callerId}`).emit('call:accepted', {
+            callId: session.callId,
+            recipientId: userId,
+            conversationId: data.conversationId,
+            callType: data.callType,
+          });
+        } else {
+          logger.warn(`Unauthorized call:answer attempt by user ${userId}`);
+        }
       }
     );
 
     // 3. Reject / Decline incoming call
     socket.on('call:reject', (data: { callerId: string; reason?: string }) => {
-      io.to(`user:${data.callerId}`).emit('call:rejected', {
-        recipientId: userId,
-        reason: data.reason || 'declined',
-      });
+      const callId = userCallMap.get(userId);
+      const session = callId ? activeCalls.get(callId) : null;
+
+      if (session && (session.recipientId === userId || session.callerId === userId)) {
+        const targetId = session.recipientId === userId ? session.callerId : session.recipientId;
+        activeCalls.delete(session.callId);
+        userCallMap.delete(session.callerId);
+        userCallMap.delete(session.recipientId);
+
+        io.to(`user:${targetId}`).emit('call:rejected', {
+          callId: session.callId,
+          recipientId: userId,
+          reason: data?.reason || 'declined',
+        });
+      }
     });
 
     // 4. End active or ongoing call
-    socket.on('call:end', (data: { targetUserId: string; conversationId?: string }) => {
-      if (data.targetUserId) {
-        io.to(`user:${data.targetUserId}`).emit('call:ended', {
+    socket.on('call:end', (_data?: { targetUserId?: string; conversationId?: string }) => {
+      const callId = userCallMap.get(userId);
+      const session = callId ? activeCalls.get(callId) : null;
+
+      if (session && (session.recipientId === userId || session.callerId === userId)) {
+        const targetId = session.recipientId === userId ? session.callerId : session.recipientId;
+        activeCalls.delete(session.callId);
+        userCallMap.delete(session.callerId);
+        userCallMap.delete(session.recipientId);
+
+        io.to(`user:${targetId}`).emit('call:ended', {
+          callId: session.callId,
           byUserId: userId,
-          conversationId: data.conversationId,
+          conversationId: session.conversationId,
+          reason: 'ended',
         });
       }
     });
 
     // 5. WebRTC Signaling: Offer
     socket.on('webrtc:offer', (data: { targetUserId: string; sdp: any }) => {
+      const callId = userCallMap.get(userId);
+      const session = callId ? activeCalls.get(callId) : null;
+      if (!session || (session.callerId !== userId && session.recipientId !== userId)) {
+        logger.warn(`Rejected unauthenticated webrtc:offer from ${userId}`);
+        return;
+      }
+
+      const peerId = session.callerId === userId ? session.recipientId : session.callerId;
+      if (peerId !== data.targetUserId) {
+        logger.warn(`Rejected webrtc:offer to mismatch peer ${data.targetUserId}`);
+        return;
+      }
+
+      const parsedSdp = sdpSchema.safeParse(data.sdp);
+      if (!parsedSdp.success) {
+        logger.warn(`Rejected invalid SDP offer from ${userId}`);
+        return;
+      }
+
       io.to(`user:${data.targetUserId}`).emit('webrtc:offer', {
+        callId: session.callId,
         senderId: userId,
-        sdp: data.sdp,
+        sdp: parsedSdp.data,
       });
     });
 
     // 6. WebRTC Signaling: Answer
     socket.on('webrtc:answer', (data: { targetUserId: string; sdp: any }) => {
+      const callId = userCallMap.get(userId);
+      const session = callId ? activeCalls.get(callId) : null;
+      if (!session || (session.callerId !== userId && session.recipientId !== userId)) {
+        logger.warn(`Rejected unauthenticated webrtc:answer from ${userId}`);
+        return;
+      }
+
+      const peerId = session.callerId === userId ? session.recipientId : session.callerId;
+      if (peerId !== data.targetUserId) {
+        logger.warn(`Rejected webrtc:answer to mismatch peer ${data.targetUserId}`);
+        return;
+      }
+
+      const parsedSdp = sdpSchema.safeParse(data.sdp);
+      if (!parsedSdp.success) {
+        logger.warn(`Rejected invalid SDP answer from ${userId}`);
+        return;
+      }
+
       io.to(`user:${data.targetUserId}`).emit('webrtc:answer', {
+        callId: session.callId,
         senderId: userId,
-        sdp: data.sdp,
+        sdp: parsedSdp.data,
       });
     });
 
     // 7. WebRTC Signaling: ICE Candidate
     socket.on('webrtc:ice-candidate', (data: { targetUserId: string; candidate: any }) => {
+      const callId = userCallMap.get(userId);
+      const session = callId ? activeCalls.get(callId) : null;
+      if (!session || (session.callerId !== userId && session.recipientId !== userId)) {
+        return;
+      }
+
+      const peerId = session.callerId === userId ? session.recipientId : session.callerId;
+      if (peerId !== data.targetUserId) {
+        return;
+      }
+
+      const parsedCandidate = iceCandidateSchema.safeParse(data.candidate);
+      if (!parsedCandidate.success) {
+        return;
+      }
+
       io.to(`user:${data.targetUserId}`).emit('webrtc:ice-candidate', {
+        callId: session.callId,
         senderId: userId,
-        candidate: data.candidate,
+        candidate: parsedCandidate.data,
       });
     });
 
     // Disconnect cleanup
     socket.on('disconnect', () => {
       logger.debug(`Socket disconnected: ${socket.id} (user: ${user.username})`);
+
+      // Active call cleanup: Notify peer if disconnected abruptly
+      const activeCallId = userCallMap.get(userId);
+      if (activeCallId) {
+        const session = activeCalls.get(activeCallId);
+        if (session) {
+          const peerId = session.callerId === userId ? session.recipientId : session.callerId;
+          activeCalls.delete(activeCallId);
+          userCallMap.delete(session.callerId);
+          userCallMap.delete(session.recipientId);
+
+          io.to(`user:${peerId}`).emit('call:ended', {
+            callId: session.callId,
+            byUserId: userId,
+            conversationId: session.conversationId,
+            reason: 'peer_disconnected',
+          });
+        }
+      }
+
       const userSockets = activeUserSockets.get(userId);
       if (userSockets) {
         userSockets.delete(socket.id);

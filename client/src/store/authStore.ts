@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { User } from '../types';
 import { authService, LoginDTO, RegisterDTO } from '../services/auth.service';
-import { getAccessToken, getRefreshToken } from '../lib/api';
+import { getAccessToken, setAccessToken } from '../lib/api';
 
 interface AuthState {
   user: User | null;
@@ -33,8 +33,8 @@ const getStoredUser = (): User | null => {
 const getStoredIsAuth = (): boolean => {
   if (typeof window === 'undefined') return false;
   return Boolean(
-    localStorage.getItem('connectly_access_token') ||
-    localStorage.getItem('connectly_refresh_token')
+    document.cookie.includes('connectly_logged_in=1') ||
+    getAccessToken()
   );
 };
 
@@ -49,9 +49,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.login(data);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('connectly_user', JSON.stringify(response.user));
-      }
       set({
         user: response.user,
         isAuthenticated: true,
@@ -70,9 +67,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.googleLogin(credential);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('connectly_user', JSON.stringify(response.user));
-      }
       set({
         user: response.user,
         isAuthenticated: true,
@@ -91,9 +85,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.register(data);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('connectly_user', JSON.stringify(response.user));
-      }
       set({
         user: response.user,
         isAuthenticated: true,
@@ -112,14 +103,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       await authService.logout();
-    } catch (err) {
+    } catch {
       // Ignore logout errors
     } finally {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('connectly_user');
-        localStorage.removeItem('connectly_access_token');
-        localStorage.removeItem('connectly_refresh_token');
-      }
+      setAccessToken(null);
       set({
         user: null,
         isAuthenticated: false,
@@ -132,49 +119,42 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialize: async () => {
     if (get().isInitialized) return;
 
-    // Fast check: if no tokens, user is definitely logged out
+    const isLoggedInCookie = typeof window !== 'undefined' && document.cookie.includes('connectly_logged_in=1');
     const token = getAccessToken();
-    const refreshToken = getRefreshToken();
-    if (!token && !refreshToken) {
+
+    if (!isLoggedInCookie && !token) {
       set({ user: null, isAuthenticated: false, isInitialized: true, isLoading: false });
       return;
     }
 
     try {
-      // 1. First attempt to validate access token with /auth/me
-      try {
-        const user = await authService.getMe();
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('connectly_user', JSON.stringify(user));
+      if (token) {
+        try {
+          const user = await authService.getMe();
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('connectly_user', JSON.stringify(user));
+          }
+          set({ user, isAuthenticated: true, isInitialized: true, isLoading: false });
+          return;
+        } catch {
+          // Token expired, fall through to refresh
         }
-        set({
-          user,
-          isAuthenticated: true,
-          isInitialized: true,
-          isLoading: false,
-        });
-        return;
-      } catch {
-        // If getMe failed (e.g. access token expired), perform silent refresh
-        const refreshRes = await authService.refresh();
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('connectly_user', JSON.stringify(refreshRes.user));
-        }
-        set({
-          user: refreshRes.user,
-          isAuthenticated: true,
-          isInitialized: true,
-          isLoading: false,
-        });
-        return;
       }
-    } catch {
-      // Refresh token truly revoked or invalid
+
+      // Silent refresh via HttpOnly cookie
+      const refreshRes = await authService.refresh();
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('connectly_user');
-        localStorage.removeItem('connectly_access_token');
-        localStorage.removeItem('connectly_refresh_token');
+        localStorage.setItem('connectly_user', JSON.stringify(refreshRes.user));
       }
+      set({
+        user: refreshRes.user,
+        isAuthenticated: true,
+        isInitialized: true,
+        isLoading: false,
+      });
+    } catch {
+      // Refresh token truly revoked or expired
+      setAccessToken(null);
       set({
         user: null,
         isAuthenticated: false,

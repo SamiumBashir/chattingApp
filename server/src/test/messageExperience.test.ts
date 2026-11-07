@@ -136,7 +136,14 @@ describe('Phase 5 — Messaging Experience (Edit, Delete, Reactions)', () => {
   });
 
   describe('Emoji Reactions', () => {
+    const getMockConv = () => ({
+      _id: new mongoose.Types.ObjectId(convId),
+      hasParticipant: () => true,
+      getParticipantRole: () => 'member',
+    });
+
     it('adds reaction to message on POST /api/v1/messages/:id/reactions', async () => {
+      vi.spyOn(Conversation, 'findById').mockResolvedValue(getMockConv() as any);
       const mockMsg = {
         id: msgId,
         _id: new mongoose.Types.ObjectId(msgId),
@@ -160,6 +167,7 @@ describe('Phase 5 — Messaging Experience (Edit, Delete, Reactions)', () => {
     });
 
     it('removes reaction on DELETE /api/v1/messages/:id/reactions', async () => {
+      vi.spyOn(Conversation, 'findById').mockResolvedValue(getMockConv() as any);
       const mockMsg = {
         id: msgId,
         _id: new mongoose.Types.ObjectId(msgId),

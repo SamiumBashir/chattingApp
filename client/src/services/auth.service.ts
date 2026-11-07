@@ -1,4 +1,4 @@
-import { apiClient, setAccessToken, setRefreshToken, getRefreshToken } from '../lib/api';
+import { apiClient, setAccessToken } from '../lib/api';
 import { ApiResponse, User } from '../types';
 
 export interface RegisterDTO {
@@ -16,7 +16,6 @@ export interface LoginDTO {
 export interface AuthResponseData {
   user: User;
   accessToken: string;
-  refreshToken?: string;
   verificationToken?: string;
 }
 
@@ -35,9 +34,6 @@ export const authService = {
     if (res.data.data?.accessToken) {
       setAccessToken(res.data.data.accessToken);
     }
-    if (res.data.data?.refreshToken) {
-      setRefreshToken(res.data.data.refreshToken);
-    }
     if (res.data.data?.user && typeof window !== 'undefined') {
       localStorage.setItem('connectly_user', JSON.stringify(res.data.data.user));
     }
@@ -48,9 +44,6 @@ export const authService = {
     const res = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/login', data);
     if (res.data.data?.accessToken) {
       setAccessToken(res.data.data.accessToken);
-    }
-    if (res.data.data?.refreshToken) {
-      setRefreshToken(res.data.data.refreshToken);
     }
     if (res.data.data?.user && typeof window !== 'undefined') {
       localStorage.setItem('connectly_user', JSON.stringify(res.data.data.user));
@@ -63,9 +56,6 @@ export const authService = {
     if (res.data.data?.accessToken) {
       setAccessToken(res.data.data.accessToken);
     }
-    if (res.data.data?.refreshToken) {
-      setRefreshToken(res.data.data.refreshToken);
-    }
     if (res.data.data?.user && typeof window !== 'undefined') {
       localStorage.setItem('connectly_user', JSON.stringify(res.data.data.user));
     }
@@ -74,29 +64,16 @@ export const authService = {
 
   async logout(): Promise<void> {
     try {
-      const refreshToken = getRefreshToken();
-      await apiClient.post('/auth/logout', { refreshToken });
+      await apiClient.post('/auth/logout', {});
     } finally {
       setAccessToken(null);
-      setRefreshToken(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('connectly_user');
-        localStorage.removeItem('connectly_access_token');
-        localStorage.removeItem('connectly_refresh_token');
-      }
     }
   },
 
   async refresh(): Promise<AuthResponseData> {
-    const storedRefreshToken = getRefreshToken();
-    const res = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/refresh', {
-      refreshToken: storedRefreshToken,
-    });
+    const res = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/refresh', {});
     if (res.data.data?.accessToken) {
       setAccessToken(res.data.data.accessToken);
-    }
-    if (res.data.data?.refreshToken) {
-      setRefreshToken(res.data.data.refreshToken);
     }
     if (res.data.data?.user && typeof window !== 'undefined') {
       localStorage.setItem('connectly_user', JSON.stringify(res.data.data.user));

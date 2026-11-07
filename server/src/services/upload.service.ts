@@ -13,6 +13,16 @@ if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SE
   });
 }
 
+export const ALLOWED_UPLOAD_FOLDERS = [
+  'connectly/attachments',
+  'connectly/avatars',
+  'connectly/voice',
+  'connectly/direct',
+  'connectly/chat',
+] as const;
+
+export type AllowedUploadFolder = typeof ALLOWED_UPLOAD_FOLDERS[number];
+
 export interface UploadSignatureResponse {
   signature: string;
   timestamp: number;
@@ -25,7 +35,16 @@ export class UploadService {
   /**
    * Generate secure signed upload parameters for client-side direct upload
    */
-  static generateSignature(folder = 'connectly/attachments'): UploadSignatureResponse {
+  static generateSignature(folder: string = 'connectly/attachments'): UploadSignatureResponse {
+    // Validate folder against strict whitelist
+    if (!ALLOWED_UPLOAD_FOLDERS.includes(folder as AllowedUploadFolder)) {
+      throw new AppError(
+        `Invalid upload folder. Must be one of: ${ALLOWED_UPLOAD_FOLDERS.join(', ')}`,
+        400,
+        'INVALID_UPLOAD_FOLDER'
+      );
+    }
+
     const timestamp = Math.round(new Date().getTime() / 1000);
     const apiSecret = env.CLOUDINARY_API_SECRET || 'mock_secret';
 
@@ -76,8 +95,16 @@ export class UploadService {
     buffer: Buffer,
     fileName: string,
     mimeType: string,
-    folder = 'connectly/direct'
+    folder: string = 'connectly/direct'
   ) {
+    if (!ALLOWED_UPLOAD_FOLDERS.includes(folder as AllowedUploadFolder)) {
+      throw new AppError(
+        `Invalid upload folder. Must be one of: ${ALLOWED_UPLOAD_FOLDERS.join(', ')}`,
+        400,
+        'INVALID_UPLOAD_FOLDER'
+      );
+    }
+
     const resourceType = mimeType.startsWith('image/')
       ? 'image'
       : mimeType.startsWith('audio/') || mimeType.startsWith('video/')
@@ -101,8 +128,19 @@ export class UploadService {
         },
         (error, result) => {
           if (error || !result) {
-            logger.warn(`Cloudinary upload failed (${error?.message}). Falling back to inline data URL.`);
-            // Resilient fallback: For media under 5MB, generate data URL so messaging never breaks
+            logger.warn(`Cloudinary upload failed (${error?.message}).`);
+
+            // In production, reject immediately to prevent database bloat from Base64
+            if (env.NODE_ENV === 'production') {
+              return reject(
+                new AppError(
+                  `Upload failed: ${error?.message || 'Invalid Cloudinary configuration'}. Please check storage credentials.`,
+                  500
+                )
+              );
+            }
+
+            // Resilient fallback strictly for non-production environments under 5MB
             if (buffer.length <= 5 * 1024 * 1024) {
               const base64Data = buffer.toString('base64');
               const dataUrl = `data:${mimeType};base64,${base64Data}`;
@@ -119,7 +157,7 @@ export class UploadService {
 
             return reject(
               new AppError(
-                `Upload failed: ${error?.message || 'Invalid Cloudinary credentials'}. Please verify CLOUDINARY_CLOUD_NAME in settings.`,
+                `Upload failed: ${error?.message || 'Invalid Cloudinary credentials'}.`,
                 500
               )
             );

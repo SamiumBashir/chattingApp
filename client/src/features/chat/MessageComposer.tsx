@@ -26,6 +26,12 @@ import {
 } from '@/lib/imageCompression';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 
+const CHAT_EMOJIS = [
+  '😊', '😂', '🔥', '❤️', '👍', '🎉', '😍', '🙏',
+  '🙌', '✨', '👏', '🚀', '💯', '😎', '🥳', '🤔',
+  '😭', '🥺', '👀', '💡', '🌟', '💪', '🤝', '☕',
+];
+
 interface MessageComposerProps {
   conversationId: string;
   currentUser: User;
@@ -36,6 +42,8 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   const {
     replyingToMessage,
@@ -75,6 +83,29 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
       inputRef.current?.focus();
     }
   }, [replyingToMessage]);
+
+  // Click outside listener for emoji picker popover
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
+
+  const handleSelectEmoji = (emoji: string) => {
+    setContent((prev) => prev + emoji);
+    inputRef.current?.focus();
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setContent(e.target.value);
@@ -464,12 +495,41 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
               />
               <button
                 type="button"
-                className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
-                title="Emoji"
+                onClick={() => setShowEmojiPicker((prev) => !prev)}
+                className={`absolute right-3 top-2.5 transition-colors ${
+                  showEmojiPicker
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Choose emoji"
                 aria-label="Add emoji"
               >
                 <Smile className="h-5 w-5" />
               </button>
+
+              {/* Functional Emoji Picker Popover */}
+              {showEmojiPicker && (
+                <div
+                  ref={emojiPickerRef}
+                  className="absolute right-0 bottom-12 z-50 p-2.5 rounded-2xl bg-card border shadow-xl ring-1 ring-border/50 animate-in fade-in zoom-in-95 duration-150 w-64 max-w-[calc(100vw-32px)]"
+                >
+                  <div className="text-[11px] font-semibold text-muted-foreground px-1 pb-1.5 border-b mb-1.5">
+                    Quick Emojis
+                  </div>
+                  <div className="grid grid-cols-8 gap-1">
+                    {CHAT_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => handleSelectEmoji(emoji)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-base hover:bg-muted hover:scale-125 transition-transform"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Send Button */}

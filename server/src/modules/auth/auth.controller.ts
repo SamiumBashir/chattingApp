@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../../services/auth.service.js';
+import { EmailService } from '../../services/email.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { AuthenticatedRequest } from '../../types/index.js';
 import { env } from '../../config/env.js';
@@ -37,12 +38,12 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     const result = await AuthService.register(req.body, meta);
     setRefreshCookie(res, result.refreshToken);
 
+    // Refresh token is transported exclusively via HttpOnly cookie to prevent XSS exfiltration
     sendSuccess(
       res,
       {
         user: result.user,
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
         verificationToken: env.NODE_ENV !== 'production' ? result.verificationToken : undefined,
       },
       201
@@ -58,12 +59,12 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     const result = await AuthService.login(req.body, meta);
     setRefreshCookie(res, result.refreshToken);
 
+    // Refresh token transported exclusively via HttpOnly cookie
     sendSuccess(
       res,
       {
         user: result.user,
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
       },
       200
     );
@@ -79,12 +80,12 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     const result = await AuthService.googleLogin(credential, meta);
     setRefreshCookie(res, result.refreshToken);
 
+    // Refresh token transported exclusively via HttpOnly cookie
     sendSuccess(
       res,
       {
         user: result.user,
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
       },
       200
     );
@@ -103,9 +104,9 @@ export const refresh = async (req: Request, res: Response, next: NextFunction): 
     const result = await AuthService.refresh(refreshToken, meta);
     setRefreshCookie(res, result.refreshToken);
 
+    // Never expose refresh token in response body
     sendSuccess(res, {
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
       user: result.user,
     });
   } catch (error) {
@@ -168,11 +169,17 @@ export const resendVerification = async (req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    // In development / demo, we generate a new verification token and return it
+    // Generate new verification token and dispatch email
     const { raw, hashed } = (await import('../../utils/token.js')).generateRandomToken();
     user.emailVerificationToken = hashed;
     user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await user.save();
+
+    await EmailService.sendVerificationEmail({
+      to: user.email,
+      name: user.name,
+      token: raw,
+    }).catch(() => {});
 
     sendSuccess(res, {
       message: 'Verification email sent',

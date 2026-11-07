@@ -1,7 +1,9 @@
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import Redis from 'ioredis';
 import { createApp } from './app.js';
-import { env } from './config/env.js';
+import { env, getAllowedOrigins } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { logger } from './utils/logger.js';
 import { setupSocketGateway } from './sockets/socketGateway.js';
@@ -10,17 +12,38 @@ const startServer = async () => {
   const app = createApp();
   const server = http.createServer(app);
 
-  // Initialize Socket.IO Server
+  // Initialize Socket.IO Server with strict CORS
+  const allowedOrigins = getAllowedOrigins();
+
   const io = new SocketIOServer(server, {
     cors: {
-      origin: (_requestOrigin, callback) => {
-        callback(null, true);
+      origin: (requestOrigin, callback) => {
+        if (!requestOrigin) {
+          return callback(null, true);
+        }
+        const normalizedOrigin = requestOrigin.replace(/\/+$/, '');
+        if (allowedOrigins.includes(normalizedOrigin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Socket CORS blocked: Origin ${requestOrigin} not permitted`));
       },
       credentials: true,
     },
     pingTimeout: 60000,
     pingInterval: 25000,
   });
+
+  // Redis Adapter integration for horizontal scaling if configured
+  if (env.REDIS_URL) {
+    try {
+      const pubClient = new Redis(env.REDIS_URL);
+      const subClient = pubClient.duplicate();
+      io.adapter(createAdapter(pubClient, subClient));
+      logger.info('Connected to Redis for Socket.IO multi-instance adapter');
+    } catch (redisErr: any) {
+      logger.warn(`Failed to connect Redis adapter (${redisErr.message}). Running with in-memory adapter fallback.`);
+    }
+  }
 
   // Attach io to app for access in controllers if needed
   app.set('io', io);

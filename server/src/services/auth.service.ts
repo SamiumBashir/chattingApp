@@ -1,3 +1,4 @@
+import { OAuth2Client } from 'google-auth-library';
 import { User } from '../models/User.js';
 import { Session } from '../models/Session.js';
 import { AppError } from '../utils/apiResponse.js';
@@ -13,15 +14,18 @@ import {
   ForgotPasswordInput,
   ResetPasswordInput,
 } from '../validators/auth.validator.js';
+import { EmailService } from './email.service.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+
+const googleOAuthClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
 export interface GoogleTokenPayload {
   sub: string;
   email: string;
   name?: string;
   picture?: string;
-  email_verified?: boolean;
+  email_verified: boolean;
 }
 
 export const verifyGoogleIdToken = async (idToken: string): Promise<GoogleTokenPayload> => {
@@ -29,8 +33,8 @@ export const verifyGoogleIdToken = async (idToken: string): Promise<GoogleTokenP
     throw new AppError('Google credential token is missing or invalid', 400, 'INVALID_GOOGLE_TOKEN');
   }
 
-  // Support for testing/mock credentials in test environment or development
-  if (idToken.startsWith('test_google_') || idToken.startsWith('mock_')) {
+  // Strictly isolate test mocks to test runner execution only
+  if (env.NODE_ENV === 'test' && (idToken.startsWith('test_google_') || idToken.startsWith('mock_'))) {
     const parts = idToken.split('_');
     const mockEmail = parts[2] ? `${parts[2]}@example.com` : 'google.user@example.com';
     return {
@@ -42,69 +46,43 @@ export const verifyGoogleIdToken = async (idToken: string): Promise<GoogleTokenP
     };
   }
 
-  // If token is a JWT (3 parts separated by dots)
-  const parts = idToken.split('.');
-  if (parts.length === 3) {
-    try {
-      // If we have internet access and tokeninfo is reachable, verify against Google
-      if (env.NODE_ENV !== 'test') {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
-          const response = await fetch(
-            `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
-            { signal: controller.signal }
-          );
-          clearTimeout(timeoutId);
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken,
+      audience: env.GOOGLE_CLIENT_ID || undefined,
+    });
 
-          if (response.ok) {
-            const data: any = await response.json();
-            if (env.GOOGLE_CLIENT_ID && data.aud !== env.GOOGLE_CLIENT_ID) {
-              throw new AppError('Google token audience does not match GOOGLE_CLIENT_ID', 401, 'INVALID_GOOGLE_AUDIENCE');
-            }
-            return {
-              sub: data.sub,
-              email: data.email,
-              name: data.name,
-              picture: data.picture,
-              email_verified: data.email_verified === 'true' || data.email_verified === true,
-            };
-          }
-        } catch (fetchError: any) {
-          if (fetchError instanceof AppError) throw fetchError;
-          logger.warn(
-            `Google tokeninfo endpoint unreachable or offline (${fetchError.message}). Falling back to payload decode.`
-          );
-        }
-      }
-
-      // Safe base64url decode fallback (for development / offline / tests)
-      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
-      const decoded = JSON.parse(jsonPayload);
-
-      if (!decoded.sub || !decoded.email) {
-        throw new AppError('Invalid Google token payload structure', 400, 'MALFORMED_GOOGLE_TOKEN');
-      }
-
-      if (env.GOOGLE_CLIENT_ID && decoded.aud && decoded.aud !== env.GOOGLE_CLIENT_ID) {
-        throw new AppError('Google token audience mismatch', 401, 'INVALID_GOOGLE_AUDIENCE');
-      }
-
-      return {
-        sub: decoded.sub,
-        email: decoded.email,
-        name: decoded.name || decoded.email.split('@')[0],
-        picture: decoded.picture,
-        email_verified: decoded.email_verified === true || decoded.email_verified === 'true',
-      };
-    } catch (err: any) {
-      if (err instanceof AppError) throw err;
-      throw new AppError('Failed to verify Google token: ' + err.message, 400, 'INVALID_GOOGLE_TOKEN');
+    const payload = ticket.getPayload();
+    if (!payload || !payload.sub || !payload.email) {
+      throw new AppError('Invalid Google token payload structure', 400, 'MALFORMED_GOOGLE_TOKEN');
     }
-  }
 
-  throw new AppError('Invalid Google ID token format', 400, 'INVALID_GOOGLE_TOKEN');
+    if (!payload.email_verified) {
+      throw new AppError('Google account email is not verified', 401, 'UNVERIFIED_GOOGLE_EMAIL');
+    }
+
+    // Verify issuer is Google
+    const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
+    if (payload.iss && !validIssuers.includes(payload.iss)) {
+      throw new AppError('Invalid Google token issuer', 401, 'INVALID_GOOGLE_ISSUER');
+    }
+
+    return {
+      sub: payload.sub,
+      email: payload.email.toLowerCase(),
+      name: payload.name || payload.email.split('@')[0],
+      picture: payload.picture,
+      email_verified: Boolean(payload.email_verified),
+    };
+  } catch (err: any) {
+    if (err instanceof AppError) throw err;
+    logger.warn(`Google OAuth ID token verification failed: ${err.message}`);
+    throw new AppError(
+      'Google credential verification failed. Please try signing in again.',
+      401,
+      'INVALID_GOOGLE_TOKEN'
+    );
+  }
 };
 
 interface DeviceMetadata {
@@ -144,6 +122,15 @@ export class AuthService {
     });
 
     await user.save();
+
+    // Dispatch verification email via EmailService
+    await EmailService.sendVerificationEmail({
+      to: user.email,
+      name: user.name,
+      token: verification.raw,
+    }).catch((err) => {
+      logger.warn(`Failed to dispatch verification email on register: ${err.message}`);
+    });
 
     // Create session & refresh token (expires in 30 days)
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
@@ -449,6 +436,15 @@ export class AuthService {
     user.passwordResetToken = resetToken.hashed;
     user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
+
+    // Dispatch password reset email via EmailService
+    await EmailService.sendPasswordResetEmail({
+      to: user.email,
+      name: user.name,
+      token: resetToken.raw,
+    }).catch((err) => {
+      logger.warn(`Failed to dispatch password reset email: ${err.message}`);
+    });
 
     logger.info(`Password reset requested for: ${user.email}`);
 

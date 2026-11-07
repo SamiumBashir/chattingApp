@@ -4,7 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 
-import { env } from './config/env.js';
+import { env, getAllowedOrigins } from './config/env.js';
 import { requestLogger } from './middlewares/requestLogger.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { sendError } from './utils/apiResponse.js';
@@ -25,21 +25,23 @@ export const createApp = (): Application => {
   // Security Headers
   app.use(helmet());
 
-  // CORS Configuration
+  // Explicit CORS Origin Allowlist Configuration
+  const allowedOrigins = getAllowedOrigins();
+
   app.use(
     cors({
       origin: (requestOrigin, callback) => {
-        if (
-          !requestOrigin ||
-          requestOrigin === env.CLIENT_URL ||
-          requestOrigin.endsWith('.vercel.app') ||
-          requestOrigin.includes('localhost') ||
-          requestOrigin.includes('127.0.0.1')
-        ) {
-          callback(null, true);
-        } else {
-          callback(null, true);
+        // Allow server-to-server or non-browser tools without Origin header
+        if (!requestOrigin) {
+          return callback(null, true);
         }
+
+        const normalizedOrigin = requestOrigin.replace(/\/+$/, '');
+        if (allowedOrigins.includes(normalizedOrigin)) {
+          return callback(null, true);
+        }
+
+        return callback(new Error(`CORS blocked: Origin ${requestOrigin} is not in the allowlist`));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

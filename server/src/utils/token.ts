@@ -15,7 +15,7 @@ export const generateRandomToken = (): { raw: string; hashed: string } => {
 
 export const generateAccessToken = (payload: AuthenticatedUserPayload): string => {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
-    expiresIn: '15m',
+    expiresIn: (env.JWT_ACCESS_EXPIRES_IN || '15m') as any,
   });
 };
 

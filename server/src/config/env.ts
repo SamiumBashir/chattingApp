@@ -13,8 +13,9 @@ const envSchema = z.object({
   
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters long'),
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters long'),
-  JWT_ACCESS_EXPIRES_IN: z.string().default('7d'),
+  JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
+  ALLOWED_ORIGINS: z.string().optional(),
   
   CLOUDINARY_CLOUD_NAME: z.string().optional().default('mock_cloud'),
   CLOUDINARY_API_KEY: z.string().optional().default('mock_key'),
@@ -56,4 +57,40 @@ const parseEnv = () => {
 
 export const env = parseEnv();
 export type EnvConfig = z.infer<typeof envSchema>;
+
+/**
+ * Returns a strict, verified array of allowed CORS origins
+ */
+export const getAllowedOrigins = (): string[] => {
+  const origins = new Set<string>();
+
+  // Configured client origin
+  if (env.CLIENT_URL) {
+    env.CLIENT_URL.split(',').forEach((url) => {
+      const trimmed = url.trim().replace(/\/+$/, '');
+      if (trimmed) origins.add(trimmed);
+    });
+  }
+
+  // Explicit allowed origins list
+  if (env.ALLOWED_ORIGINS) {
+    env.ALLOWED_ORIGINS.split(',').forEach((url) => {
+      const trimmed = url.trim().replace(/\/+$/, '');
+      if (trimmed) origins.add(trimmed);
+    });
+  }
+
+  // Known production frontend domain
+  origins.add('https://chatting-app-nine-sigma.vercel.app');
+
+  // Development & testing localhost origins
+  if (env.NODE_ENV !== 'production') {
+    origins.add('http://localhost:3000');
+    origins.add('http://127.0.0.1:3000');
+    origins.add('http://localhost:5000');
+    origins.add('http://127.0.0.1:5000');
+  }
+
+  return Array.from(origins);
+};
 

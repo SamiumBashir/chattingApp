@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { UploadService } from '../../services/upload.service.js';
 import { sendSuccess, AppError } from '../../utils/apiResponse.js';
+import { AuthenticatedRequest } from '../../types/index.js';
+import { User } from '../../models/User.js';
+import { Message } from '../../models/Message.js';
 
 export class UploadController {
   /**
@@ -64,13 +67,33 @@ export class UploadController {
   }
 
   /**
-   * Delete uploaded asset by public ID
+   * Delete uploaded asset by public ID (Authenticated with ownership validation)
    */
-  static async deleteAsset(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async deleteAsset(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const publicIdParam = req.params.publicId;
       const publicId = Array.isArray(publicIdParam) ? publicIdParam[0] : publicIdParam;
       const resourceType = (req.query.resourceType as 'image' | 'raw' | 'video') || 'image';
+
+      if (!publicId) {
+        throw new AppError('Public ID is required', 400);
+      }
+
+      const userId = req.user?.userId;
+      const role = req.user?.role;
+      const isAdmin = role === 'admin' || role === 'superadmin';
+
+      if (!isAdmin) {
+        // Verify ownership: was it used as their avatar or in a message sent by this user?
+        const [isAvatar, messageWithAsset] = await Promise.all([
+          User.exists({ _id: userId, avatar: { $regex: publicId } }),
+          Message.exists({ sender: userId, 'attachments.publicId': publicId }),
+        ]);
+
+        if (!isAvatar && !messageWithAsset) {
+          throw new AppError('You do not have permission to delete this asset', 403, 'FORBIDDEN');
+        }
+      }
 
       await UploadService.deleteAsset(publicId, resourceType);
 

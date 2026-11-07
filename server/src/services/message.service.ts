@@ -344,6 +344,16 @@ export class MessageService {
       throw new AppError('Cannot react to a deleted message', 400, 'MESSAGE_DELETED');
     }
 
+    // Strict Authorization: Verify user is an authorized participant in the conversation
+    const conversation = await Conversation.findById(message.conversation);
+    if (!conversation || !conversation.hasParticipant(userId)) {
+      throw new AppError(
+        'You cannot react to messages in a conversation you are not a member of',
+        403,
+        'FORBIDDEN'
+      );
+    }
+
     // Check if user already reacted
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const existingIndex = message.reactions.findIndex(
@@ -376,6 +386,16 @@ export class MessageService {
     const message = await Message.findById(messageId);
     if (!message) {
       throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+    }
+
+    // Strict Authorization: Verify user is an authorized participant in the conversation
+    const conversation = await Conversation.findById(message.conversation);
+    if (!conversation || !conversation.hasParticipant(userId)) {
+      throw new AppError(
+        'You cannot alter reactions in a conversation you are not a member of',
+        403,
+        'FORBIDDEN'
+      );
     }
 
     message.reactions = message.reactions.filter((r) => r.user.toString() !== userId);
