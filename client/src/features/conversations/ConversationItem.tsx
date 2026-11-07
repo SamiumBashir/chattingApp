@@ -24,10 +24,14 @@ export function ConversationItem({
   // If private, find the other participant
   const otherParticipant =
     conversation.type === 'private'
-      ? conversation.participants.find((p) => p.user?.id !== currentUserId)?.user
+      ? conversation.participants.find((p) => {
+          const uid = (p.user as any)?.id || (p.user as any)?._id || (typeof p.user === 'string' ? p.user : null);
+          return uid && uid !== currentUserId;
+        })?.user
       : null;
 
-  const isOnline = otherParticipant ? onlineUsers.has(otherParticipant.id) : undefined;
+  const otherParticipantId = (otherParticipant as any)?.id || (otherParticipant as any)?._id;
+  const isOnline = otherParticipantId ? onlineUsers.has(otherParticipantId) : undefined;
 
   const displayName =
     conversation.type === 'group'

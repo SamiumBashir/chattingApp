@@ -34,14 +34,14 @@ export const userCallMap = new Map<string, string>(); // userId -> callId
 const sdpSchema = z.object({
   type: z.enum(['offer', 'answer', 'pranswer', 'rollback']),
   sdp: z.string().min(1).max(200000),
-});
+}).passthrough();
 
 const iceCandidateSchema = z.object({
   candidate: z.string().optional(),
   sdpMid: z.string().nullable().optional(),
   sdpMLineIndex: z.number().nullable().optional(),
   usernameFragment: z.string().nullable().optional(),
-});
+}).passthrough();
 
 let globalIo: SocketIOServer | null = null;
 
@@ -318,7 +318,7 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
           }
 
           // Check if recipient is online
-          const isOnline = activeUserSockets.has(data.recipientId);
+          const isOnline = Boolean(activeUserSockets.get(data.recipientId)?.size);
           if (!isOnline) {
             if (typeof callback === 'function') callback({ success: false, reason: 'offline' });
             return;
@@ -440,11 +440,17 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
           recipientId: userId,
           reason: data?.reason || 'declined',
         });
+      } else if (data?.callerId) {
+        // Fallback cleanup if session was already removed
+        io.to(`user:${data.callerId}`).emit('call:rejected', {
+          recipientId: userId,
+          reason: data?.reason || 'declined',
+        });
       }
     });
 
     // 4. End active or ongoing call
-    socket.on('call:end', (_data?: { targetUserId?: string; conversationId?: string }) => {
+    socket.on('call:end', (data?: { targetUserId?: string; conversationId?: string }) => {
       const callId = userCallMap.get(userId);
       const session = callId ? activeCalls.get(callId) : null;
 
@@ -458,6 +464,13 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
           callId: session.callId,
           byUserId: userId,
           conversationId: session.conversationId,
+          reason: 'ended',
+        });
+      } else if (data?.targetUserId) {
+        // Fallback cleanup if session was already removed
+        io.to(`user:${data.targetUserId}`).emit('call:ended', {
+          byUserId: userId,
+          conversationId: data.conversationId,
           reason: 'ended',
         });
       }

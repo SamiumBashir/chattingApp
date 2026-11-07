@@ -27,8 +27,13 @@ export function ConversationDetails({
 
   const isGroup = conversation.type === 'group';
   const otherParticipant = !isGroup
-    ? conversation.participants.find((p) => p.user?.id !== currentUserId)?.user
+    ? conversation.participants.find((p) => {
+        const uid = (p.user as any)?.id || (p.user as any)?._id || (typeof p.user === 'string' ? p.user : null);
+        return uid && uid !== currentUserId;
+      })?.user
     : null;
+
+  const otherParticipantId = (otherParticipant as any)?.id || (otherParticipant as any)?._id;
 
   const currentRole = conversation.participants.find(
     (p) => p.user?.id === currentUserId
@@ -40,17 +45,17 @@ export function ConversationDetails({
 
   // Check if this user is in the current user's blocked list
   useEffect(() => {
-    if (otherParticipant?.id) {
+    if (otherParticipantId) {
       setIsCheckingBlocked(true);
       userService
         .getBlockedUsers()
         .then((list) => {
-          setIsBlocked(list.some((u) => u.id === otherParticipant.id));
+          setIsBlocked(list.some((u) => (u.id || (u as any)._id) === otherParticipantId));
         })
         .catch(() => {})
         .finally(() => setIsCheckingBlocked(false));
     }
-  }, [otherParticipant?.id]);
+  }, [otherParticipantId]);
 
   const handleLeaveGroup = async () => {
     if (!confirm('Are you sure you want to leave this group?')) return;

@@ -40,18 +40,22 @@ export function CallModal() {
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(() => {});
     }
-    if (remoteAudioRef.current && remoteStream) {
+    // Only use separate audio element for audio-only calls to avoid double-audio echo on video calls
+    if (remoteAudioRef.current && remoteStream && callType === 'audio') {
       remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
     }
-  }, [remoteStream, callState]);
+  }, [remoteStream, callState, callType]);
 
   // Attach local stream to preview element
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(() => {});
     }
-  }, [localStream, callState]);
+  }, [localStream, callState, isVideoOff]);
 
   if (callState === 'idle') {
     return null;
@@ -59,8 +63,8 @@ export function CallModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center select-none animate-in fade-in duration-200">
-      {/* Hidden audio element to guarantee remote voice playback */}
-      <audio ref={remoteAudioRef} autoPlay playsInline />
+      {/* Audio element active for voice calls to guarantee voice playback without echo */}
+      {callType === 'audio' && <audio ref={remoteAudioRef} autoPlay playsInline />}
 
       {/* ============================================================ */}
       {/* 1. INCOMING CALL SCREEN */}
@@ -151,16 +155,30 @@ export function CallModal() {
               {callType === 'video' ? 'Outgoing Video Call' : 'Outgoing Voice Call'}
             </span>
 
-            {/* Pulsing Avatar */}
+            {/* Pulsing Avatar or Live Camera Preview */}
             <div className="relative my-4 flex items-center justify-center">
-              <span className="absolute inline-flex h-28 w-28 animate-ping rounded-full bg-primary/20 opacity-60 duration-1000" />
-              <span className="absolute inline-flex h-24 w-24 animate-pulse rounded-full bg-primary/30" />
-              <Avatar
-                src={partner?.avatar}
-                name={partner?.name || 'User'}
-                size="xl"
-                className="relative h-20 w-20 ring-4 ring-primary/40 shadow-xl"
-              />
+              {callType === 'video' && localStream && !isVideoOff ? (
+                <div className="relative h-28 w-28 rounded-full overflow-hidden ring-4 ring-primary/40 shadow-xl border-2 border-primary">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="h-full w-full object-cover -scale-x-100"
+                  />
+                </div>
+              ) : (
+                <>
+                  <span className="absolute inline-flex h-28 w-28 animate-ping rounded-full bg-primary/20 opacity-60 duration-1000" />
+                  <span className="absolute inline-flex h-24 w-24 animate-pulse rounded-full bg-primary/30" />
+                  <Avatar
+                    src={partner?.avatar}
+                    name={partner?.name || 'User'}
+                    size="xl"
+                    className="relative h-20 w-20 ring-4 ring-primary/40 shadow-xl"
+                  />
+                </>
+              )}
             </div>
 
             <h3 className="text-xl font-bold text-foreground mt-2">

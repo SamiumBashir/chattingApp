@@ -22,10 +22,14 @@ export function ConversationHeader({
 
   const otherUser =
     conversation.type === 'private'
-      ? conversation.participants.find((p) => p.user?.id !== currentUserId)?.user
+      ? conversation.participants.find((p) => {
+          const uid = (p.user as any)?.id || (p.user as any)?._id || (typeof p.user === 'string' ? p.user : null);
+          return uid && uid !== currentUserId;
+        })?.user
       : null;
 
-  const isOnline = otherUser ? onlineUsers.has(otherUser.id) : undefined;
+  const otherUserId = (otherUser as any)?.id || (otherUser as any)?._id;
+  const isOnline = otherUserId ? onlineUsers.has(otherUserId) : undefined;
 
   const displayName =
     conversation.type === 'group'
@@ -95,7 +99,7 @@ export function ConversationHeader({
       </div>
 
       <div className="flex items-center gap-1">
-        {conversation.type === 'private' && otherUser && (
+        {conversation.type === 'private' && otherUser && otherUserId && (
           <>
             <Button
               variant="ghost"
@@ -104,12 +108,12 @@ export function ConversationHeader({
               onClick={() =>
                 startCall(
                   {
-                    id: otherUser.id,
+                    id: otherUserId,
                     name: otherUser.name || otherUser.username,
                     username: otherUser.username,
                     avatar: otherUser.avatar,
                   },
-                  conversation.id,
+                  conversation.id || (conversation as any)._id,
                   'audio'
                 )
               }
@@ -126,12 +130,12 @@ export function ConversationHeader({
               onClick={() =>
                 startCall(
                   {
-                    id: otherUser.id,
+                    id: otherUserId,
                     name: otherUser.name || otherUser.username,
                     username: otherUser.username,
                     avatar: otherUser.avatar,
                   },
-                  conversation.id,
+                  conversation.id || (conversation as any)._id,
                   'video'
                 )
               }
