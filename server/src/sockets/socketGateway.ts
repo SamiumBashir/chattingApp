@@ -29,6 +29,7 @@ export interface ActiveCallSession {
 
 export const activeCalls = new Map<string, ActiveCallSession>(); // callId -> ActiveCallSession
 export const userCallMap = new Map<string, string>(); // userId -> callId
+export const callTimeouts = new Map<string, NodeJS.Timeout>(); // callId -> 15s ringing timeout
 
 // WebRTC Signaling payload validation schemas
 const sdpSchema = z.object({
@@ -382,6 +383,29 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
           userCallMap.set(userId, callId);
           userCallMap.set(data.recipientId, callId);
 
+          // 15-second automatic ring timeout: auto-cut call if recipient doesn't answer within 15 seconds
+          const ringTimeout = setTimeout(() => {
+            callTimeouts.delete(callId);
+            const currentSession = activeCalls.get(callId);
+            if (currentSession && currentSession.status === 'ringing') {
+              activeCalls.delete(callId);
+              userCallMap.delete(currentSession.callerId);
+              userCallMap.delete(currentSession.recipientId);
+
+              io.to(`user:${currentSession.callerId}`).emit('call:ended', {
+                callId,
+                conversationId: currentSession.conversationId,
+                reason: 'timeout',
+              });
+              io.to(`user:${currentSession.recipientId}`).emit('call:ended', {
+                callId,
+                conversationId: currentSession.conversationId,
+                reason: 'timeout',
+              });
+            }
+          }, 15000);
+          callTimeouts.set(callId, ringTimeout);
+
           // Emit incoming call to recipient's personal room
           io.to(`user:${data.recipientId}`).emit('call:incoming', {
             callId,
@@ -411,6 +435,10 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
         const session = callId ? activeCalls.get(callId) : null;
 
         if (session && session.recipientId === userId && session.callerId === data.callerId) {
+          if (callTimeouts.has(session.callId)) {
+            clearTimeout(callTimeouts.get(session.callId)!);
+            callTimeouts.delete(session.callId);
+          }
           session.status = 'connected';
           io.to(`user:${session.callerId}`).emit('call:accepted', {
             callId: session.callId,
@@ -430,6 +458,10 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       const session = callId ? activeCalls.get(callId) : null;
 
       if (session && (session.recipientId === userId || session.callerId === userId)) {
+        if (callTimeouts.has(session.callId)) {
+          clearTimeout(callTimeouts.get(session.callId)!);
+          callTimeouts.delete(session.callId);
+        }
         const targetId = session.recipientId === userId ? session.callerId : session.recipientId;
         activeCalls.delete(session.callId);
         userCallMap.delete(session.callerId);
@@ -455,6 +487,10 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       const session = callId ? activeCalls.get(callId) : null;
 
       if (session && (session.recipientId === userId || session.callerId === userId)) {
+        if (callTimeouts.has(session.callId)) {
+          clearTimeout(callTimeouts.get(session.callId)!);
+          callTimeouts.delete(session.callId);
+        }
         const targetId = session.recipientId === userId ? session.callerId : session.recipientId;
         activeCalls.delete(session.callId);
         userCallMap.delete(session.callerId);
@@ -564,6 +600,10 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       // Active call cleanup: Notify peer if disconnected abruptly
       const activeCallId = userCallMap.get(userId);
       if (activeCallId) {
+        if (callTimeouts.has(activeCallId)) {
+          clearTimeout(callTimeouts.get(activeCallId)!);
+          callTimeouts.delete(activeCallId);
+        }
         const session = activeCalls.get(activeCallId);
         if (session) {
           const peerId = session.callerId === userId ? session.recipientId : session.callerId;

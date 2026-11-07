@@ -1,12 +1,18 @@
 'use client';
 
 import { useEffect } from 'react';
-import { connectSocket, disconnectSocket } from '../lib/socket';
+import { connectSocket, disconnectSocket, getSocket } from '../lib/socket';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useNotificationStore } from '../store/notificationStore';
-import { playNotificationSound, showDesktopNotification } from '../lib/sound';
-import { Message, Reaction, Notification } from '../types';
+import {
+  playNotificationSound,
+  showDesktopNotification,
+  alertTabTitle,
+  resetTabTitle,
+  requestNotificationPermission,
+} from '../lib/sound';
+import type { Message, Reaction, Notification as AppNotification } from '../types';
 
 export function useSocket() {
   const { isAuthenticated, user } = useAuthStore();
@@ -20,6 +26,19 @@ export function useSocket() {
     setOnlineUsers,
   } = useChatStore();
 
+  // 1. Join / Leave active conversation room on change
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !activeConversationId) return;
+
+    socket.emit('conversation:join', { conversationId: activeConversationId });
+
+    return () => {
+      socket.emit('conversation:leave', { conversationId: activeConversationId });
+    };
+  }, [activeConversationId]);
+
+  // 2. Global socket lifecycle & event listeners
   useEffect(() => {
     if (!isAuthenticated || !user) {
       disconnectSocket();
@@ -28,37 +47,67 @@ export function useSocket() {
 
     const socket = connectSocket();
 
-    // 1. New message
+    // Auto-request browser desktop notification permission if supported & default
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'default'
+    ) {
+      requestNotificationPermission().catch(() => {});
+    }
+
+    // Reset alerting tab title when user switches back to this tab
+    const handleReturnToTab = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        resetTabTitle();
+      }
+    };
+
+    window.addEventListener('focus', handleReturnToTab);
+    document.addEventListener('visibilitychange', handleReturnToTab);
+
+    // 1. New incoming message
     const handleNewMessage = (message: Message) => {
       addMessage(message.conversation, message);
 
-      const isCurrentConversation = message.conversation === activeConversationId;
-      const isWindowFocused = typeof document !== 'undefined' && document.hasFocus();
+      const currentActiveId = useChatStore.getState().activeConversationId;
+      const isCurrentConversation = message.conversation === currentActiveId;
+      const isTabVisibleAndFocused =
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible' &&
+        document.hasFocus();
 
-      // If user is actively inside this conversation and window is focused:
-      if (isCurrentConversation && isWindowFocused && message.sender?.id !== user.id) {
+      // If user is actively reading this conversation inside this focused tab:
+      if (isCurrentConversation && isTabVisibleAndFocused && message.sender?.id !== user.id) {
         socket.emit('message:read', {
           messageId: message.id,
           conversationId: message.conversation,
         });
-        // Conversation is read, clear notifications for this conversation
         useNotificationStore.getState().markConversationNotificationsAsRead(message.conversation);
       } else if (message.sender?.id !== user.id) {
-        // Message is unread! (Different conversation or window is in background)
-        // 1. Increment unread counter on that conversation
+        // Message is unread! (Different conversation or user is in another tab / background)
+        // A. Increment unread counter on that conversation
         useChatStore.getState().incrementUnread(message.conversation);
 
-        // 2. Play gentle audio chime if user enabled sound
+        // B. Play crystal notification bell chime!
         if (useNotificationStore.getState().soundEnabled) {
           playNotificationSound();
         }
 
-        // 3. Native desktop notification if permitted
-        const senderName = message.sender?.name || message.sender?.username || 'New message';
-        const snippet = message.content || (message.attachments?.length ? 'Sent an attachment' : 'New message');
-        showDesktopNotification(senderName, snippet, () => {
-          useChatStore.getState().setActiveConversation(message.conversation);
-        });
+        // C. If user is NOT in this tab (tab hidden, window blurred or in another tab): alert them!
+        if (!isTabVisibleAndFocused) {
+          const senderName = message.sender?.name || message.sender?.username || 'New message';
+          const snippet =
+            message.content || (message.attachments?.length ? 'Sent an attachment' : 'New message');
+
+          // Flash tab title with notification bell
+          alertTabTitle(senderName);
+
+          // Show native desktop notification
+          showDesktopNotification(senderName, snippet, () => {
+            useChatStore.getState().setActiveConversation(message.conversation);
+          });
+        }
       }
     };
 
@@ -79,7 +128,6 @@ export function useSocket() {
       username: string;
       isTyping: boolean;
     }) => {
-      // Ignore self typing events
       if (data.userId !== user.id) {
         setTypingUser(data.conversationId, data.username, data.isTyping);
       }
@@ -148,7 +196,7 @@ export function useSocket() {
     };
 
     // 8. Notifications
-    const handleNewNotification = (data: { notification: Notification }) => {
+    const handleNewNotification = (data: { notification: AppNotification }) => {
       if (data?.notification) {
         useNotificationStore.getState().addNotification(data.notification);
       }
@@ -226,12 +274,10 @@ export function useSocket() {
       );
     }
 
-    // Join active conversation room if set
-    if (activeConversationId) {
-      socket.emit('conversation:join', { conversationId: activeConversationId });
-    }
-
     return () => {
+      window.removeEventListener('focus', handleReturnToTab);
+      document.removeEventListener('visibilitychange', handleReturnToTab);
+
       socket.off('message:new', handleNewMessage);
       socket.off('message:status', handleMessageStatus);
       socket.off('typing:update', handleTypingUpdate);
@@ -248,7 +294,6 @@ export function useSocket() {
   }, [
     isAuthenticated,
     user,
-    activeConversationId,
     conversations,
     addMessage,
     updateMessageStatus,

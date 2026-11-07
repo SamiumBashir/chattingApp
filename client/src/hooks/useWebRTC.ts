@@ -230,14 +230,14 @@ export function useWebRTC() {
       startOutgoingCall(targetPartner, targetConversationId, type);
       startOutgoingRinging();
 
-      // Auto-cancel if recipient doesn't answer after 35 seconds
+      // Auto-cancel if recipient doesn't answer after 15 seconds
       if (ringingTimeoutRef.current) clearTimeout(ringingTimeoutRef.current);
       ringingTimeoutRef.current = setTimeout(() => {
         stopCallSounds();
         playCallEndSound();
-        setError('No answer.');
+        setError('No answer (15s timeout).');
         handleEndCall(true);
-      }, 35000);
+      }, 15000);
 
       socket.emit(
         'call:initiate',
@@ -392,12 +392,12 @@ export function useWebRTC() {
       setIncomingCall(data.caller, data.conversationId, data.callType);
       startIncomingRinging();
 
-      // Auto-dismiss incoming call after 35 seconds
+      // Auto-dismiss incoming call after 15 seconds
       if (ringingTimeoutRef.current) clearTimeout(ringingTimeoutRef.current);
       ringingTimeoutRef.current = setTimeout(() => {
         stopCallSounds();
         resetCall();
-      }, 35000);
+      }, 15000);
     };
 
     // B. Recipient accepted our call -> Caller creates WebRTC Offer
@@ -538,8 +538,11 @@ export function useWebRTC() {
       }, 2500);
     };
 
-    // G. Call Ended by other user
-    const onCallEnded = () => {
+    // G. Call Ended by other user or timed out
+    const onCallEnded = (data?: { reason?: string }) => {
+      if (data?.reason === 'timeout' || data?.reason === 'no_answer') {
+        setError('No answer (15s timeout). Call ended.');
+      }
       handleEndCall(false);
     };
 
