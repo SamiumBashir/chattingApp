@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="bn" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connectly — Official Promo Video Generator & Downloader</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    canvas {
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 font-sans select-none">
+
+  <div class="w-full max-w-4xl flex flex-col gap-4">
+    
+    <!-- Top Bar with Direct Download CTA -->
+    <div class="flex flex-wrap items-center justify-between gap-3 px-1">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+          <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+            Connectly Video Generator
+            <span class="text-[10px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">720p HD Ready</span>
+          </h1>
+          <p class="text-[11px] text-zinc-400">নিচের লাল বাটনে ক্লিক করলেই সম্পূর্ণ ভিডিওটি ডাউনলোড হয়ে যাবে</p>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div class="flex items-center gap-2">
+        <button id="downloadBtn" onclick="startGenerationAndDownload()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-rose-600/30 transition-all cursor-pointer">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span id="downloadBtnText">ভিডিওটি ডাউনলোড করুন (Record & Download)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Video Canvas Wrapper (16:9) -->
+    <div class="relative w-full aspect-video bg-black border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-between">
+      <canvas id="videoCanvas" width="1280" height="720" class="w-full h-full object-contain bg-zinc-950"></canvas>
+      
+      <!-- Overlay Live Progress Badge when Recording -->
+      <div id="recordingOverlay" class="hidden absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-rose-500/40 text-xs font-semibold text-rose-400">
+        <span class="h-2.5 w-2.5 rounded-full bg-rose-500 animate-ping"></span>
+        <span id="recordingStatusText">রেকর্ডিং হচ্ছে: 00:00 / 00:24</span>
+      </div>
+    </div>
+
+    <!-- Player Controls Bar -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3">
+      <!-- Play/Pause -->
+      <button id="playBtn" onclick="togglePlay()" class="h-8 w-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition-all">
+        <svg id="playIcon" class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8l6 2-6 2V8z" clip-rule="evenodd" />
+        </svg>
+      </button>
+
+      <!-- Timecode -->
+      <span id="timecode" class="text-xs font-mono text-zinc-400 shrink-0">00:00 / 00:24</span>
+
+      <!-- Timeline Progress Bar -->
+      <div class="flex-1 relative h-2 bg-zinc-800 rounded-full overflow-hidden cursor-pointer" onclick="seek(event)">
+        <div id="progressBar" class="h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 w-0 transition-all duration-75"></div>
+      </div>
+
+      <!-- Quick Scene Jumps -->
+      <div class="hidden sm:flex items-center gap-1.5 text-[10px]">
+        <button onclick="jumpTo(0)" class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Intro</button>
+        <button onclick="jumpTo(4)" class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Chat</button>
+        <button onclick="jumpTo(8)" class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Compress</button>
+        <button onclick="jumpTo(12)" class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Call</button>
+        <button onclick="jumpTo(16)" class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Security</button>
+        <button onclick="jumpTo(20)" class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Outro</button>
+      </div>
+    </div>
+
+    <!-- Download Notification Box -->
+    <div id="downloadNotice" class="hidden p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center justify-between">
+      <span id="downloadNoticeText">ভিডিও ফাইলটি তৈরি হয়েছে এবং স্বয়ংক্রিয়ভাবে ডাউনলোড শুরু হয়েছে!</span>
+      <a id="directDownloadLink" href="#" download="connectly-promo-video.webm" class="underline font-semibold ml-2 hover:text-emerald-300">সরাসরি ডাউনলোড লিঙ্ক</a>
+    </div>
+
+  </div>
+
+  <script>
+    const canvas = document.getElementById('videoCanvas');
+    const ctx = canvas.getContext('2d');
+    const TOTAL_DURATION = 24.0; // 24 seconds total video
+    let currentTime = 0;
+    let isPlaying = false;
+    let lastTimestamp = 0;
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let audioCtx = null;
+    let audioDest = null;
+    let bgmInterval = null;
+
+    // Ambient floating particles
+    const particles = Array.from({ length: 40 }, () => ({
+      x: Math.random() * 1280,
+      y: Math.random() * 720,
+      radius: Math.random() * 2 + 1,
+      speedX: (Math.random() - 0.5) * 0.4,
+      speedY: (Math.random() - 0.5) * 0.4,
+      alpha: Math.random() * 0.5 + 0.2
+    }));
+
+    // Audio synthesizer with direct stream destination for recording
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioDest = audioCtx.createMediaStreamDestination();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playNote(freq, duration = 0.35, gainVal = 0.05) {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination); // Play to speakers
+        if (audioDest) gain.connect(audioDest); // Stream to video recorder
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    // Play periodic melodic chord arpeggio
+    let lastChordSecond = -1;
+    function checkAudioBeats(sec) {
+      const currentInt = Math.floor(sec);
+      if (currentInt !== lastChordSecond) {
+        lastChordSecond = currentInt;
+        // Chords matching the vibe
+        if (currentInt % 4 === 0) {
+          playNote(523.25, 0.4, 0.04); // C5
+          setTimeout(() => playNote(659.25, 0.4, 0.04), 120); // E5
+          setTimeout(() => playNote(783.99, 0.5, 0.04), 240); // G5
+        } else if (currentInt % 4 === 2) {
+          playNote(440.00, 0.4, 0.04); // A4
+          setTimeout(() => playNote(523.25, 0.4, 0.04), 120); // C5
+          setTimeout(() => playNote(659.25, 0.5, 0.04), 240); // E5
+        }
+      }
+    }
+
+    // Main Canvas Render Loop
+    function render(time) {
+      ctx.clearRect(0, 0, 1280, 720);
+
+      // 1. Background gradient
+      const bgGrad = ctx.createLinearGradient(0, 0, 1280, 720);
+      bgGrad.addColorStop(0, '#09090b');
+      bgGrad.addColorStop(0.5, '#130d24');
+      bgGrad.addColorStop(1, '#09090b');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 1280, 720);
+
+      // Ambient Glowing orbs
+      const pulse = Math.sin(time * 2) * 20;
+      const glow1 = ctx.createRadialGradient(200, 150, 10, 200, 150, 350 + pulse);
+      glow1.addColorStop(0, 'rgba(124, 58, 237, 0.18)');
+      glow1.addColorStop(1, 'rgba(124, 58, 237, 0)');
+      ctx.fillStyle = glow1;
+      ctx.fillRect(0, 0, 1280, 720);
+
+      const glow2 = ctx.createRadialGradient(1080, 570, 10, 1080, 570, 350 - pulse);
+      glow2.addColorStop(0, 'rgba(79, 70, 229, 0.16)');
+      glow2.addColorStop(1, 'rgba(79, 70, 229, 0)');
+      ctx.fillStyle = glow2;
+      ctx.fillRect(0, 0, 1280, 720);
+
+      // Draw floating particles
+      particles.forEach(p => {
+        p.x += p.speedX;
+        p.y += p.speedY;
+        if (p.x < 0) p.x = 1280;
+        if (p.x > 1280) p.x = 0;
+        if (p.y < 0) p.y = 720;
+        if (p.y > 720) p.y = 0;
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // 2. Render Scene content based on current time (6 scenes, 4s each)
+      if (currentTime >= 0 && currentTime < 4) {
+        renderScene1(currentTime);
+      } else if (currentTime >= 4 && currentTime < 8) {
+        renderScene2(currentTime - 4);
+      } else if (currentTime >= 8 && currentTime < 12) {
+        renderScene3(currentTime - 8);
+      } else if (currentTime >= 12 && currentTime < 16) {
+        renderScene4(currentTime - 12);
+      } else if (currentTime >= 16 && currentTime < 20) {
+        renderScene5(currentTime - 16);
+      } else {
+        renderScene6(currentTime - 20);
+      }
+
+      // 3. Bottom Subtitle Banner
+      renderSubtitleBar(currentTime);
+
+      // 4. Subtle top Connectly watermark
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.font = '600 14px sans-serif';
+      ctx.fillText('CONNECTLY — NEXT-GEN MESSAGING', 48, 48);
+
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.8)';
+      ctx.beginPath();
+      ctx.arc(36, 44, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // SCENE 1: Introduction & Brand Reveal
+    function renderScene1(t) {
+      const alpha = t < 0.5 ? t * 2 : (t > 3.5 ? (4 - t) * 2 : 1);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+      const floatY = Math.sin(t * 3) * 6;
+
+      // Glowing app icon box
+      ctx.shadowColor = 'rgba(139, 92, 246, 0.6)';
+      ctx.shadowBlur = 40;
+      const iconGrad = ctx.createLinearGradient(580, 220 + floatY, 700, 340 + floatY);
+      iconGrad.addColorStop(0, '#7c3aed');
+      iconGrad.addColorStop(1, '#4f46e5');
+      ctx.fillStyle = iconGrad;
+      roundRect(ctx, 580, 220 + floatY, 120, 120, 28);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // White chat icon inside
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.strokeRect(615, 255 + floatY, 50, 36);
+      ctx.beginPath();
+      ctx.moveTo(630, 291 + floatY);
+      ctx.lineTo(620, 305 + floatY);
+      ctx.lineTo(645, 291 + floatY);
+      ctx.stroke();
+
+      // Heading
+      ctx.fillStyle = '#a78bfa';
+      ctx.font = '700 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('THE NEXT-GEN MESSAGING PLATFORM', 640, 395);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 64px sans-serif';
+      ctx.fillText('Connectly', 640, 465);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 20px sans-serif';
+      ctx.fillText('বিদ্যুৎগতির রিয়েল-টাইম মেসেজিং, এইচডি কলিং ও স্মার্ট মিডিয়া', 640, 510);
+      ctx.restore();
+    }
+
+    // SCENE 2: Real-time Chat & Live Typing
+    function renderScene2(t) {
+      const alpha = t < 0.5 ? t * 2 : (t > 3.5 ? (4 - t) * 2 : 1);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+      // Chat Container Window
+      drawWindow(340, 140, 600, 420, 'Direct Chat · Alex Bennett (Active now)');
+
+      // Message 1 (Incoming)
+      ctx.fillStyle = '#27272a';
+      roundRect(ctx, 370, 220, 360, 55, 16);
+      ctx.fill();
+      ctx.fillStyle = '#f4f4f5';
+      ctx.font = '500 16px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('Hey! Did you check the new Connectly update? 🚀', 390, 253);
+
+      // Message 2 (Outgoing)
+      if (t > 1.0) {
+        ctx.fillStyle = '#4f46e5';
+        roundRect(ctx, 550, 295, 360, 65, 16);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Yes! Sub-millisecond delivery is incredible! 🔥', 570, 328);
+        ctx.fillStyle = '#c7d2fe';
+        ctx.font = '500 12px sans-serif';
+        ctx.fillText('10:42 AM · Seen ✓✓', 810, 348);
+      }
+
+      // Typing Indicator
+      ctx.fillStyle = '#18181b';
+      roundRect(ctx, 370, 380, 200, 42, 14);
+      ctx.fill();
+
+      // 3 bouncing dots
+      for (let i = 0; i < 3; i++) {
+        const bounce = Math.sin(t * 10 + i * 1.2) * 4;
+        ctx.fillStyle = '#818cf8';
+        ctx.beginPath();
+        ctx.arc(395 + i * 14, 401 + bounce, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '500 13px sans-serif';
+      ctx.fillText('Alex is typing...', 445, 406);
+
+      ctx.restore();
+    }
+
+    // SCENE 3: Smart Image Compression & Voice
+    function renderScene3(t) {
+      const alpha = t < 0.5 ? t * 2 : (t > 3.5 ? (4 - t) * 2 : 1);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+      drawWindow(340, 140, 600, 420, 'Smart Compression & Voice Notes');
+
+      // Compression Card Box
+      ctx.fillStyle = '#18181b';
+      roundRect(ctx, 370, 210, 540, 130, 18);
+      ctx.fill();
+
+      // Badge
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+      roundRect(ctx, 390, 225, 140, 26, 8);
+      ctx.fill();
+      ctx.fillStyle = '#10b981';
+      ctx.font = '700 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('✨ 92% DATA SAVED', 460, 243);
+
+      // 10MB vs 160KB
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 14px sans-serif';
+      ctx.fillText('Original Camera Image', 390, 280);
+      ctx.fillStyle = '#f43f5e';
+      ctx.font = '700 24px sans-serif';
+      ctx.fillText('10.0 MB', 390, 312);
+
+      // Strikethrough
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(388, 304);
+      ctx.lineTo(490, 304);
+      ctx.stroke();
+
+      // Arrow
+      ctx.fillStyle = '#10b981';
+      ctx.font = '700 32px sans-serif';
+      ctx.fillText('➜', 560, 305);
+
+      // Compressed
+      ctx.fillStyle = '#10b981';
+      ctx.font = '500 14px sans-serif';
+      ctx.fillText('Optimized WebP File', 660, 280);
+      ctx.font = '800 26px sans-serif';
+      ctx.fillText('160.6 KB', 660, 312);
+
+      // Voice Message Card
+      ctx.fillStyle = '#18181b';
+      roundRect(ctx, 370, 360, 540, 90, 18);
+      ctx.fill();
+
+      // Play circle
+      ctx.fillStyle = '#4f46e5';
+      ctx.beginPath();
+      ctx.arc(420, 405, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(415, 395);
+      ctx.lineTo(430, 405);
+      ctx.lineTo(415, 415);
+      ctx.fill();
+
+      // Sound Wave Bars
+      for (let i = 0; i < 24; i++) {
+        const barH = 8 + Math.abs(Math.sin(t * 8 + i * 0.4)) * 32;
+        ctx.fillStyle = '#818cf8';
+        roundRect(ctx, 470 + i * 14, 405 - barH / 2, 6, barH, 3);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '600 14px monospace';
+      ctx.fillText('0:24', 835, 410);
+
+      ctx.restore();
+    }
+
+    // SCENE 4: WebRTC HD Video & Audio Calling
+    function renderScene4(t) {
+      const alpha = t < 0.5 ? t * 2 : (t > 3.5 ? (4 - t) * 2 : 1);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+      drawWindow(360, 130, 560, 440, 'WebRTC HD Video & Voice Call');
+
+      // Concentric rings
+      const ringPulse = (t % 1.5) * 40;
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(640, 280, 55 + ringPulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Avatar
+      const avGrad = ctx.createLinearGradient(590, 230, 690, 330);
+      avGrad.addColorStop(0, '#059669');
+      avGrad.addColorStop(1, '#10b981');
+      ctx.fillStyle = avGrad;
+      ctx.beginPath();
+      ctx.arc(640, 280, 50, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Sarah', 640, 288);
+
+      ctx.font = '700 20px sans-serif';
+      ctx.fillText('Sarah Jenkins', 640, 365);
+
+      ctx.fillStyle = '#10b981';
+      ctx.font = '600 15px monospace';
+      ctx.fillText('Connected · 03:42', 640, 395);
+
+      // Controls
+      ctx.fillStyle = '#27272a';
+      ctx.beginPath();
+      ctx.arc(570, 460, 22, 0, Math.PI * 2);
+      ctx.arc(710, 460, 22, 0, Math.PI * 2);
+      ctx.fill();
+
+      // End call red button
+      ctx.fillStyle = '#e11d48';
+      ctx.beginPath();
+      ctx.arc(640, 460, 28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 18px sans-serif';
+      ctx.fillText('☎', 640, 466);
+
+      // Corner PiP box
+      ctx.fillStyle = '#18181b';
+      ctx.strokeStyle = '#52525b';
+      ctx.lineWidth = 2;
+      roundRect(ctx, 770, 180, 120, 160, 14);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '500 12px sans-serif';
+      ctx.fillText('Selfie PiP', 830, 265);
+
+      ctx.restore();
+    }
+
+    // SCENE 5: Privacy, Security & Account Control
+    function renderScene5(t) {
+      const alpha = t < 0.5 ? t * 2 : (t > 3.5 ? (4 - t) * 2 : 1);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+      drawWindow(360, 140, 560, 420, 'Settings · Privacy & Danger Zone');
+
+      // Deactivate Row
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.08)';
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, 390, 230, 500, 80, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '700 16px sans-serif';
+      ctx.fillText('⚠ Deactivate Account', 415, 262);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 13px sans-serif';
+      ctx.fillText('Temporarily freeze profile. Reactivate anytime on login.', 415, 285);
+
+      // Delete Row
+      ctx.fillStyle = 'rgba(244, 63, 94, 0.08)';
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.3)';
+      roundRect(ctx, 390, 330, 500, 80, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f43f5e';
+      ctx.font = '700 16px sans-serif';
+      ctx.fillText('🗑 Delete Account Permanently', 415, 362);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 13px sans-serif';
+      ctx.fillText('Password required to confirm. All data securely wiped.', 415, 385);
+
+      // Password Protected Badge
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.2)';
+      roundRect(ctx, 500, 440, 280, 36, 10);
+      ctx.fill();
+      ctx.fillStyle = '#c4b5fd';
+      ctx.font = '600 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔒 Protected by Password Confirmation', 640, 463);
+
+      ctx.restore();
+    }
+
+    // SCENE 6: Outro / Call To Action
+    function renderScene6(t) {
+      const alpha = t < 0.5 ? t * 2 : 1;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+      const iconGrad = ctx.createLinearGradient(585, 210, 695, 320);
+      iconGrad.addColorStop(0, '#7c3aed');
+      iconGrad.addColorStop(0.5, '#4f46e5');
+      iconGrad.addColorStop(1, '#10b981');
+      ctx.fillStyle = iconGrad;
+      roundRect(ctx, 585, 210, 110, 110, 26);
+      ctx.fill();
+
+      // White chat icon inside
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.strokeRect(618, 242, 44, 32);
+      ctx.beginPath();
+      ctx.moveTo(632, 274);
+      ctx.lineTo(622, 286);
+      ctx.lineTo(644, 274);
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 52px sans-serif';
+      ctx.fillText('Connectly', 640, 380);
+
+      ctx.fillStyle = '#c4b5fd';
+      ctx.font = '700 22px sans-serif';
+      ctx.fillText('যোগাযোগ হোক আরও দ্রুত, আরও স্মার্ট!', 640, 425);
+
+      // URL Pill
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      roundRect(ctx, 420, 465, 440, 46, 23);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '600 16px monospace';
+      ctx.fillText('chatting-app-nine-sigma.vercel.app', 640, 494);
+
+      ctx.restore();
+    }
+
+    // Subtitle helper at bottom
+    function renderSubtitleBar(t) {
+      const subtitles = [
+        { start: 0, end: 4, text: 'স্বাগতম Connectly-তে — আপনার অল-ইন-ওয়ান আধুনিক মেসেজিং প্ল্যাটফর্ম।' },
+        { start: 4, end: 8, text: 'লাইভ টাইপিং ও কোনো ল্যাগ ছাড়াই সাব-মিলিসেকেন্ড তাৎক্ষণিক রিয়েল-টাইম চ্যাটিং।' },
+        { start: 8, end: 12, text: '১০MB ছবি চোখের পলকে ২০০KB এর নিচে নেমে স্বয়ংক্রিয় সেন্ড হয় ও ভয়েস মেসেজ সুবিধা।' },
+        { start: 12, end: 16, text: 'ব্রাউজার থেকেই ক্রিস্টাল ক্লিয়ার WebRTC ১-অন-১ ভয়েস ও ফুল-এইচডি ভিডিও কল।' },
+        { start: 16, end: 20, text: 'পাসওয়ার্ড দিয়ে নিশ্চিত করে অ্যাকাউন্ট ডিঅ্যাক্টিভেশন, ডিলিট ও সম্পূর্ণ প্রাইভেসি।' },
+        { start: 20, end: 24, text: 'যোগাযোগ হোক আরও দ্রুত, আরও স্মার্ট! আজই শুরু করুন Connectly।' }
+      ];
+
+      const currentSub = subtitles.find(s => t >= s.start && t < s.end) || subtitles[subtitles.length - 1];
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.fillRect(0, 640, 1280, 80);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '600 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(currentSub.text, 640, 688);
+    }
+
+    // Window mockup helper
+    function drawWindow(x, y, w, h, title) {
+      ctx.fillStyle = '#18181b';
+      ctx.strokeStyle = '#27272a';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, x, y, w, h, 20);
+      ctx.fill();
+      ctx.stroke();
+
+      // Top title bar
+      ctx.fillStyle = '#27272a';
+      roundRect(ctx, x, y, w, 44, [20, 20, 0, 0]);
+      ctx.fill();
+
+      // 3 dots
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath(); ctx.arc(x + 22, y + 22, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath(); ctx.arc(x + 38, y + 22, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath(); ctx.arc(x + 54, y + 22, 5, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = '#e4e4e7';
+      ctx.font = '600 13px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(title, x + 74, y + 26);
+    }
+
+    function roundRect(ctx, x, y, width, height, radius) {
+      if (typeof radius === 'number') {
+        radius = { tl: radius, tr: radius, br: radius, bl: radius };
+      } else if (Array.isArray(radius)) {
+        radius = { tl: radius[0], tr: radius[1], br: radius[2], bl: radius[3] };
+      }
+      ctx.beginPath();
+      ctx.moveTo(x + radius.tl, y);
+      ctx.lineTo(x + width - radius.tr, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+      ctx.lineTo(x + width, y + height - radius.br);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+      ctx.lineTo(x + radius.bl, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+      ctx.lineTo(x, y + radius.tl);
+      ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+      ctx.closePath();
+    }
+
+    // Animation Loop
+    function loop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      if (isPlaying) {
+        currentTime += delta;
+        checkAudioBeats(currentTime);
+        if (currentTime >= TOTAL_DURATION) {
+          if (isRecording) {
+            stopRecordingAndSave();
+          } else {
+            currentTime = 0;
+          }
+        }
+        updateUI();
+      }
+
+      render(currentTime);
+      requestAnimationFrame(loop);
+    }
+
+    function updateUI() {
+      const curSec = Math.floor(currentTime);
+      document.getElementById('timecode').innerText = `00:${curSec.toString().padStart(2, '0')} / 00:${TOTAL_DURATION}`;
+      const pct = (currentTime / TOTAL_DURATION) * 100;
+      document.getElementById('progressBar').style.width = `${pct}%`;
+
+      if (isRecording) {
+        document.getElementById('recordingStatusText').innerText = `রেকর্ডিং হচ্ছে: 00:${curSec.toString().padStart(2, '0')} / 00:${TOTAL_DURATION}`;
+      }
+    }
+
+    function togglePlay() {
+      initAudio();
+      isPlaying = !isPlaying;
+      const icon = document.getElementById('playIcon');
+      if (isPlaying) {
+        icon.innerHTML = '<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8h2v4H7V8zm4 0h2v4h-2V8z" clip-rule="evenodd" />';
+      } else {
+        icon.innerHTML = '<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8l6 2-6 2V8z" clip-rule="evenodd" />';
+      }
+    }
+
+    function jumpTo(sec) {
+      currentTime = sec;
+      updateUI();
+    }
+
+    function seek(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      currentTime = pct * TOTAL_DURATION;
+      updateUI();
+    }
+
+    // ==========================================
+    // RECORD AND EXPORT MP4/WEBM VIDEO FILE
+    // ==========================================
+    function startGenerationAndDownload() {
+      initAudio();
+      currentTime = 0;
+      isPlaying = true;
+      isRecording = true;
+      recordedChunks = [];
+
+      document.getElementById('recordingOverlay').classList.remove('hidden');
+      document.getElementById('downloadBtnText').innerText = 'ভিডিও তৈরি হচ্ছে (Recording...)...';
+      document.getElementById('downloadBtn').classList.replace('bg-rose-600', 'bg-amber-600');
+      document.getElementById('downloadNotice').classList.add('hidden');
+
+      // Capture 30 FPS HD Canvas stream + Synthesized Audio stream
+      const canvasStream = canvas.captureStream(30);
+      const audioTrack = audioDest ? audioDest.stream.getAudioTracks()[0] : null;
+      if (audioTrack) {
+        canvasStream.addTrack(audioTrack);
+      }
+
+      // Detect best video format (MP4 or WebM)
+      const mimeType = MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"')
+        ? 'video/mp4'
+        : MediaRecorder.isTypeSupported('video/mp4')
+        ? 'video/mp4'
+        : 'video/webm; codecs=vp9,opus';
+
+      mediaRecorder = new MediaRecorder(canvasStream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 4000000 // 4 Mbps high clarity
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const isMp4 = mimeType.includes('mp4');
+        const blob = new Blob(recordedChunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const filename = isMp4 ? 'connectly-promo-video.mp4' : 'connectly-promo-video.webm';
+
+        // Auto trigger download
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+        }, 100);
+
+        // Update notice
+        document.getElementById('downloadNotice').classList.remove('hidden');
+        document.getElementById('downloadNoticeText').innerText = `সফলভাবে ${filename} তৈরি হয়েছে এবং ডাউনলোড সম্পন্ন হয়েছে!`;
+        const directLink = document.getElementById('directDownloadLink');
+        directLink.href = url;
+        directLink.download = filename;
+        directLink.innerText = `${filename} ডাউনলোড করুন`;
+
+        // Reset button
+        document.getElementById('downloadBtnText').innerText = 'আবার ডাউনলোড করুন (Download Video)';
+        document.getElementById('downloadBtn').classList.replace('bg-amber-600', 'bg-rose-600');
+        document.getElementById('recordingOverlay').classList.add('hidden');
+      };
+
+      mediaRecorder.start();
+    }
+
+    function stopRecordingAndSave() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      isRecording = false;
+      isPlaying = false;
+      const icon = document.getElementById('playIcon');
+      icon.innerHTML = '<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8l6 2-6 2V8z" clip-rule="evenodd" />';
+    }
+
+    // Auto-start loop
+    requestAnimationFrame(loop);
+    setTimeout(() => {
+      togglePlay();
+    }, 500);
+  </script>
+</body>
+</html>
