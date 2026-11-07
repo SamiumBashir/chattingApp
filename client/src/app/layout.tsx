@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import QueryProvider from '@/components/providers/QueryProvider';
 
@@ -6,6 +6,13 @@ export const metadata: Metadata = {
   title: 'Connectly — Modern Real-Time Messaging Platform',
   description:
     'A production-minded, real-time messaging platform inspired by WhatsApp, Messenger, and modern SaaS applications.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

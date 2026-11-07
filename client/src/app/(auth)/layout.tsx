@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen w-full bg-[#5D26C1] bg-gradient-to-br from-[#6A28D9] via-[#5B21B6] to-[#451296] flex items-center justify-center py-6 px-3 sm:py-10 sm:px-6 lg:p-8 relative overflow-x-hidden overflow-y-auto">
+    <div className="h-screen h-[100dvh] max-h-[100dvh] w-full bg-[#5D26C1] bg-gradient-to-br from-[#6A28D9] via-[#5B21B6] to-[#451296] flex items-center justify-center p-0 sm:py-6 sm:px-4 md:py-8 md:px-6 lg:p-8 relative overflow-hidden fixed inset-0 sm:relative select-none overscroll-none">
       {/* High-priority preload for LCP hero artwork */}
       <link
         rel="preload"
@@ -21,7 +21,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* Main Content Area */}
-      <main className="w-full flex items-center justify-center relative z-10 my-auto">
+      <main className="w-full h-full sm:h-auto max-h-[100dvh] flex items-center justify-center relative z-10 my-auto overflow-hidden">
         {children}
       </main>
     </div>

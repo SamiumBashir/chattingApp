@@ -164,14 +164,14 @@ export function AuthCard({ initialMode }: AuthCardProps) {
   };
 
   return (
-    <div className="w-full max-w-md sm:max-w-lg md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-white rounded-2xl sm:rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] overflow-hidden border border-white/30 relative h-auto md:h-[660px]">
+    <div className="w-full max-w-md sm:max-w-lg md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-white rounded-none sm:rounded-2xl md:rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] overflow-hidden border-0 sm:border border-white/30 relative h-full sm:h-auto sm:max-h-[96dvh] md:h-[660px] flex flex-col md:block">
       {/* ------------------------------------------------------------------ */}
       {/* ILLUSTRATION PANEL                                                 */}
       {/* - On Mobile: Top animated banner with parallax shift               */}
       {/* - On Desktop/Tablet: Full-height sliding panel (58.33% width)       */}
       {/* ------------------------------------------------------------------ */}
       <div
-        className="w-full h-40 sm:h-48 md:w-[58.333333%] md:h-full md:absolute md:top-0 md:bottom-0 md:left-0 md:z-20 bg-[#725CEF] flex items-center justify-center overflow-hidden p-3 md:p-6 lg:p-10 select-none md:shadow-[0_0_50px_rgba(0,0,0,0.18)] transition-transform duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+        className="w-full h-24 sm:h-32 md:w-[58.333333%] md:h-full md:absolute md:top-0 md:bottom-0 md:left-0 md:z-20 bg-[#725CEF] flex items-center justify-center overflow-hidden p-2 sm:p-3 md:p-6 lg:p-10 select-none md:shadow-[0_0_50px_rgba(0,0,0,0.18)] transition-transform duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform shrink-0"
         style={{
           transform: isDesktop
             ? mode === 'register'
@@ -181,7 +181,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
         }}
       >
         <div
-          className="relative w-full h-full min-h-[140px] md:min-h-[500px] flex items-center justify-center transition-transform duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+          className="relative w-full h-full min-h-[85px] sm:min-h-[120px] md:min-h-[500px] flex items-center justify-center transition-transform duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
           style={{
             transform: !isDesktop
               ? mode === 'register'
@@ -204,7 +204,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
       {/* ------------------------------------------------------------------ */}
       {/* MOBILE INTERACTIVE TAB SLIDER (Visible on Mobile only)             */}
       {/* ------------------------------------------------------------------ */}
-      <div className="md:hidden px-6 pt-5 pb-1 bg-white">
+      <div className="md:hidden px-4 sm:px-6 pt-2 pb-1 sm:pt-4 bg-white shrink-0">
         <div className="bg-slate-100 p-1 rounded-xl relative flex select-none">
           {/* Animated active pill indicator */}
           <div
@@ -239,9 +239,9 @@ export function AuthCard({ initialMode }: AuthCardProps) {
       {/* - On Mobile: Horizontal carousel track sliding between forms       */}
       {/* - On Desktop/Tablet: Absolute 2-column layout with fade/slide       */}
       {/* ------------------------------------------------------------------ */}
-      <div className="w-full overflow-hidden md:overflow-visible md:w-full md:h-full">
+      <div className="w-full flex-1 overflow-hidden md:overflow-visible md:w-full md:h-full min-h-0 flex flex-col md:block">
         <div
-          className="w-[200%] md:w-full md:h-full flex md:block transition-transform duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+          className="w-[200%] md:w-full h-full flex md:block transition-transform duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
           style={{
             transform: !isDesktop
               ? mode === 'register'
@@ -254,7 +254,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           {/* LOGIN FORM PANEL                                                 */}
           {/* ---------------------------------------------------------------- */}
           <div
-            className={`w-1/2 md:w-[41.666667%] md:right-0 md:top-0 md:bottom-0 md:h-full md:absolute p-6 sm:p-8 md:p-8 lg:p-12 flex flex-col justify-between bg-white overflow-y-auto transition-all duration-500 ${
+            className={`w-1/2 md:w-[41.666667%] md:right-0 md:top-0 md:bottom-0 md:h-full md:absolute px-5 py-2.5 sm:p-6 md:p-8 lg:p-12 flex flex-col justify-between bg-white overflow-y-auto overscroll-contain transition-all duration-500 ${
               isDesktop
                 ? mode === 'login'
                   ? 'opacity-100 translate-x-0 pointer-events-auto z-10 delay-150'
@@ -264,35 +264,35 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           >
             <div>
               {/* Header Typography */}
-              <div className="mb-4 sm:mb-6 md:mb-8">
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
+              <div className="mb-2.5 sm:mb-4 md:mb-8">
+                <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
                   Hello,
                 </h1>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
+                <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
                   Welcome back
                 </h2>
               </div>
 
               {/* Error Message */}
               {loginServerError && (
-                <div className="mb-4 sm:mb-5 rounded-lg bg-red-50 p-2.5 sm:p-3 text-xs font-medium text-red-600 border border-red-200">
+                <div className="mb-3 sm:mb-5 rounded-lg bg-red-50 p-2 sm:p-2.5 text-xs font-medium text-red-600 border border-red-200">
                   {loginServerError}
                 </div>
               )}
 
               {/* Form Fields */}
-              <form onSubmit={handleLoginSubmit(onLoginSubmit)} className="space-y-3.5 sm:space-y-4 md:space-y-6">
+              <form onSubmit={handleLoginSubmit(onLoginSubmit)} className="space-y-2.5 sm:space-y-4 md:space-y-6">
                 {/* Username or email input */}
                 <div>
                   <input
                     type="text"
                     placeholder="Username or email"
                     autoComplete="username"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 sm:py-2.5 md:py-3 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 md:py-3 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...loginFormRegister('identifier')}
                   />
                   {loginErrors.identifier && (
-                    <p className="mt-1 text-xs text-red-500">{loginErrors.identifier.message}</p>
+                    <p className="mt-0.5 text-xs text-red-500">{loginErrors.identifier.message}</p>
                   )}
                 </div>
 
@@ -302,25 +302,25 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     type={showLoginPassword ? 'text' : 'password'}
                     placeholder="Password"
                     autoComplete="current-password"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-2 sm:py-2.5 md:py-3 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 md:py-3 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...loginFormRegister('password')}
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-0 top-1.5 sm:top-2 md:top-2.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-0 top-1 sm:top-1.5 md:top-2.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                     aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
                   >
                     {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                   {loginErrors.password && (
-                    <p className="mt-1 text-xs text-red-500">{loginErrors.password.message}</p>
+                    <p className="mt-0.5 text-xs text-red-500">{loginErrors.password.message}</p>
                   )}
                 </div>
 
                 {/* Remember me & Forgot password */}
-                <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer select-none py-1">
+                <div className="flex items-center justify-between pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer select-none py-0.5">
                     <input
                       type="checkbox"
                       checked={rememberMe}
@@ -332,7 +332,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
 
                   <Link
                     href="/forgot-password"
-                    className="text-xs text-slate-500 hover:text-slate-800 transition-colors py-1"
+                    className="text-xs text-slate-500 hover:text-slate-800 transition-colors py-0.5"
                   >
                     Forgot password?
                   </Link>
@@ -342,7 +342,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-[#5850EC] hover:bg-[#4338CA] text-white font-medium py-2.5 sm:py-3 rounded-lg text-sm shadow-[0_4px_14px_rgba(88,80,236,0.35)] hover:shadow-[0_6px_20px_rgba(88,80,236,0.45)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-[#5850EC] hover:bg-[#4338CA] text-white font-medium py-2 sm:py-2.5 md:py-3 rounded-lg text-sm shadow-[0_4px_14px_rgba(88,80,236,0.35)] hover:shadow-[0_6px_20px_rgba(88,80,236,0.45)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
                     <>
@@ -356,7 +356,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
               </form>
 
               {/* Social Google Login Button */}
-              <div className="mt-3.5 sm:mt-4">
+              <div className="mt-2.5 sm:mt-3.5 md:mt-4">
                 <GoogleSignInButton
                   label="Continue with Google"
                   onError={(err) => setLoginServerError(err)}
@@ -364,7 +364,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
               </div>
 
               {/* Sign Up Redirect Link */}
-              <p className="text-center text-xs text-slate-500 mt-4 sm:mt-5 pb-1">
+              <p className="text-center text-xs text-slate-500 mt-2.5 sm:mt-4 md:mt-5 pb-1">
                 Don&apos;t have an account?{' '}
                 <a
                   href="/register"
@@ -385,7 +385,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           {/* REGISTER FORM PANEL                                              */}
           {/* ---------------------------------------------------------------- */}
           <div
-            className={`w-1/2 md:w-[41.666667%] md:left-0 md:top-0 md:bottom-0 md:h-full md:absolute p-6 sm:p-8 md:p-8 lg:p-10 flex flex-col justify-between bg-white overflow-y-auto transition-all duration-500 ${
+            className={`w-1/2 md:w-[41.666667%] md:left-0 md:top-0 md:bottom-0 md:h-full md:absolute px-5 py-2.5 sm:p-6 md:p-8 lg:p-10 flex flex-col justify-between bg-white overflow-y-auto overscroll-contain transition-all duration-500 ${
               isDesktop
                 ? mode === 'register'
                   ? 'opacity-100 translate-x-0 pointer-events-auto z-10 delay-150'
@@ -395,34 +395,34 @@ export function AuthCard({ initialMode }: AuthCardProps) {
           >
             <div>
               {/* Header Typography */}
-              <div className="mb-3.5 sm:mb-4 md:mb-5">
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
+              <div className="mb-2 sm:mb-3.5 md:mb-5">
+                <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight">
                   Create,
                 </h1>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
+                <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-[#1E1B4B] tracking-tight leading-tight mt-0.5">
                   Your account
                 </h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">
                   Join Connectly and start messaging in real-time
                 </p>
               </div>
 
               {/* Error Message */}
               {regServerError && (
-                <div className="mb-3 rounded-lg bg-red-50 p-2 text-xs font-medium text-red-600 border border-red-200">
+                <div className="mb-2 rounded-lg bg-red-50 p-2 text-xs font-medium text-red-600 border border-red-200">
                   {regServerError}
                 </div>
               )}
 
               {/* Register Form */}
-              <form onSubmit={handleRegSubmit(onRegSubmit)} className="space-y-2.5 sm:space-y-3 md:space-y-3.5">
+              <form onSubmit={handleRegSubmit(onRegSubmit)} className="space-y-1.5 sm:space-y-2.5 md:space-y-3.5">
                 {/* Full Name */}
                 <div>
                   <input
                     type="text"
                     placeholder="Full name"
                     autoComplete="name"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1 sm:py-1.5 md:py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...regFormRegister('name')}
                   />
                   {regErrors.name && (
@@ -436,7 +436,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     type="text"
                     placeholder="Username (e.g. alex_j)"
                     autoComplete="username"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1 sm:py-1.5 md:py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...regFormRegister('username')}
                   />
                   {regErrors.username && (
@@ -450,7 +450,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     type="email"
                     placeholder="Email address"
                     autoComplete="email"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1 sm:py-1.5 md:py-2 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...regFormRegister('email')}
                   />
                   {regErrors.email && (
@@ -464,13 +464,13 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     type={showRegPassword ? 'text' : 'password'}
                     placeholder="Password"
                     autoComplete="new-password"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1 sm:py-1.5 md:py-2 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...regFormRegister('password')}
                   />
                   <button
                     type="button"
                     onClick={() => setShowRegPassword(!showRegPassword)}
-                    className="absolute right-0 top-1 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-0 top-0.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                     aria-label={showRegPassword ? 'Hide password' : 'Show password'}
                   >
                     {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -480,7 +480,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                   )}
 
                   {/* Password strength indicators */}
-                  <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] text-slate-400">
+                  <div className="mt-0.5 grid grid-cols-2 gap-0.5 text-[9px] sm:text-[10px] text-slate-400">
                     <span className={`flex items-center gap-1 ${hasMinLength ? 'text-emerald-600 font-medium' : ''}`}>
                       <Check className={`h-3 w-3 ${hasMinLength ? 'opacity-100 text-emerald-600' : 'opacity-30'}`} /> 8+ chars
                     </span>
@@ -502,13 +502,13 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="Confirm password"
                     autoComplete="new-password"
-                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1.5 sm:py-2 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
+                    className="w-full border-0 border-b border-slate-200 focus:border-[#5850EC] focus:ring-0 rounded-none px-0 py-1 sm:py-1.5 md:py-2 pr-9 text-slate-800 placeholder:text-slate-400 text-base sm:text-sm transition-colors outline-hidden bg-transparent"
                     {...regFormRegister('confirmPassword')}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-0 top-1 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-0 top-0.5 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                     aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                   >
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -522,7 +522,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-[#5850EC] hover:bg-[#4338CA] text-white font-medium py-2 sm:py-2.5 rounded-lg text-sm shadow-[0_4px_14px_rgba(88,80,236,0.35)] hover:shadow-[0_6px_20px_rgba(88,80,236,0.45)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-1"
+                  className="w-full bg-[#5850EC] hover:bg-[#4338CA] text-white font-medium py-2 sm:py-2.5 rounded-lg text-sm shadow-[0_4px_14px_rgba(88,80,236,0.35)] hover:shadow-[0_6px_20px_rgba(88,80,236,0.45)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-0.5"
                 >
                   {isLoading ? (
                     <>
@@ -536,7 +536,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
               </form>
 
               {/* Social Google Sign-up Button */}
-              <div className="mt-3">
+              <div className="mt-2 sm:mt-3">
                 <GoogleSignInButton
                   label="Sign up with Google"
                   onError={(err) => setRegServerError(err)}
@@ -544,7 +544,7 @@ export function AuthCard({ initialMode }: AuthCardProps) {
               </div>
 
               {/* Sign In Redirect Link */}
-              <p className="text-center text-xs text-slate-500 mt-3 sm:mt-4 pb-1">
+              <p className="text-center text-xs text-slate-500 mt-2 sm:mt-3 pb-1">
                 Already have an account?{' '}
                 <a
                   href="/login"

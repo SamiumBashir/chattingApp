@@ -96,7 +96,7 @@ export default function ChatPage() {
 
   return (
     <CallProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
+      <div className="flex h-screen h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-background fixed inset-0 sm:relative overscroll-none">
       {/* 1. Left Icon Navigation Rail */}
       <aside className="hidden sm:flex h-full w-16 flex-col items-center justify-between border-r bg-card py-4 shrink-0 select-none">
         <div className="flex flex-col items-center gap-6">
