@@ -83,7 +83,7 @@ const userSchema = new Schema<IUser>(
     },
     status: {
       type: String,
-      enum: ['active', 'suspended', 'banned'],
+      enum: ['active', 'suspended', 'banned', 'deactivated'],
       default: 'active',
       index: true,
     },

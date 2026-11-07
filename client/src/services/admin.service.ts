@@ -1,5 +1,5 @@
 import api from '../lib/api';
-import { ApiResponse, User } from '../types';
+import { ApiResponse, User, UserStatus } from '../types';
 
 export interface AdminOverview {
   users: {
@@ -76,7 +76,7 @@ export const adminService = {
 
   async updateUserStatus(
     userId: string,
-    status: 'active' | 'suspended' | 'banned',
+    status: UserStatus,
     reason?: string
   ): Promise<User> {
     const res = await api.patch<ApiResponse<{ user: User }>>(`/admin/users/${userId}/status`, {

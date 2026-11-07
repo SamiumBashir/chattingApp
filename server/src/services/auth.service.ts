@@ -201,6 +201,11 @@ export class AuthService {
       throw new AppError('This account is currently suspended', 403, 'ACCOUNT_SUSPENDED');
     }
 
+    if (user.status === 'deactivated') {
+      user.status = 'active';
+      logger.info(`Reactivated user account on login: ${user.username} (${user.id})`);
+    }
+
     // Update last seen
     user.lastSeen = new Date();
     await user.save();
@@ -294,6 +299,11 @@ export class AuthService {
 
     if (user.status === 'suspended') {
       throw new AppError('This account is currently suspended', 403, 'ACCOUNT_SUSPENDED');
+    }
+
+    if (user.status === 'deactivated') {
+      user.status = 'active';
+      logger.info(`Reactivated user account on login: ${user.username} (${user.id})`);
     }
 
     // Update last seen

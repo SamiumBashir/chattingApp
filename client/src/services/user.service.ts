@@ -42,5 +42,19 @@ export const userService = {
     const res = await apiClient.get<ApiResponse<{ blockedUsers: Array<{ id: string; name: string; username: string; avatar?: string }> }>>('/users/blocked');
     return res.data.data!.blockedUsers;
   },
+
+  async deactivateAccount(password: string): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.post<ApiResponse<{ success: boolean; message: string }>>('/users/deactivate', {
+      password,
+    });
+    return res.data.data!;
+  },
+
+  async deleteAccount(password: string): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.post<ApiResponse<{ success: boolean; message: string }>>('/users/delete-account', {
+      password,
+    });
+    return res.data.data!;
+  },
 };
 

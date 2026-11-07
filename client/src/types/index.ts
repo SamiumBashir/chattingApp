@@ -1,5 +1,5 @@
 export type UserRole = 'user' | 'admin' | 'superadmin';
-export type UserStatus = 'active' | 'suspended' | 'banned';
+export type UserStatus = 'active' | 'suspended' | 'banned' | 'deactivated';
 
 export interface User {
   id: string;

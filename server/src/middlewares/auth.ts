@@ -42,6 +42,10 @@ export const authenticate = async (
       throw new AppError('Your account is temporarily suspended', 403, 'ACCOUNT_SUSPENDED');
     }
 
+    if (user.status === 'deactivated') {
+      throw new AppError('Your account is deactivated. Please sign in to reactivate it.', 403, 'ACCOUNT_DEACTIVATED');
+    }
+
     // Verify session has not been revoked or expired
     const session = await Session.findById(decoded.sessionId);
     if (!session || !session.isValid()) {

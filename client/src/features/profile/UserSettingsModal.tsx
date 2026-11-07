@@ -18,6 +18,12 @@ import {
   Mail,
   Sliders,
   CheckCircle2,
+  AlertTriangle,
+  Trash2,
+  UserX,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
@@ -50,6 +56,13 @@ export function UserSettingsModal() {
   >([]);
   const [isLoadingBlocked, setIsLoadingBlocked] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'privacy' | 'account'>('profile');
+
+  // Account Deactivation & Deletion confirmation state
+  const [confirmAction, setConfirmAction] = useState<'deactivate' | 'delete' | null>(null);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,6 +144,37 @@ export function UserSettingsModal() {
     setIsSettingsOpen(false);
     await logout();
     router.push('/login');
+  };
+
+  const handleExecuteAccountAction = async () => {
+    if (!confirmPassword.trim()) {
+      setActionError('Please enter your password to confirm.');
+      return;
+    }
+
+    setIsSubmittingAction(true);
+    setActionError('');
+    try {
+      if (confirmAction === 'deactivate') {
+        await userService.deactivateAccount(confirmPassword);
+      } else if (confirmAction === 'delete') {
+        await userService.deleteAccount(confirmPassword);
+      }
+
+      setConfirmAction(null);
+      setConfirmPassword('');
+      setIsSettingsOpen(false);
+      await logout();
+      router.push('/login');
+    } catch (err: any) {
+      setActionError(
+        err.response?.data?.error?.message ||
+          err.message ||
+          'Operation failed. Please verify your password.'
+      );
+    } finally {
+      setIsSubmittingAction(false);
+    }
   };
 
   if (!isSettingsOpen || !user) return null;
@@ -460,14 +504,69 @@ export function UserSettingsModal() {
                 </div>
               </div>
 
-              {/* Danger Zone: Log Out */}
-              <div className="pt-2 border-t">
+              {/* Danger Zone: Deactivate, Delete & Sign Out */}
+              <div className="space-y-3 pt-3 border-t">
+                <h4 className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Danger Zone
+                </h4>
+
+                {/* Deactivate Account */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                  <div className="pr-3">
+                    <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <UserX className="h-3.5 w-3.5 text-amber-500" /> Deactivate Account
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Temporarily disable your profile. Reactivate anytime by logging back in.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setConfirmAction('deactivate');
+                      setConfirmPassword('');
+                      setActionError('');
+                    }}
+                    className="h-8 text-xs shrink-0 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                  >
+                    Deactivate
+                  </Button>
+                </div>
+
+                {/* Delete Account */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-destructive/20 bg-destructive/5">
+                  <div className="pr-3">
+                    <p className="text-xs font-semibold text-destructive flex items-center gap-1.5">
+                      <Trash2 className="h-3.5 w-3.5" /> Delete Account
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Permanently erase your account, login credentials, and data. Irreversible.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      setConfirmAction('delete');
+                      setConfirmPassword('');
+                      setActionError('');
+                    }}
+                    className="h-8 text-xs shrink-0"
+                  >
+                    Delete Account
+                  </Button>
+                </div>
+
+                {/* Sign Out */}
                 <Button
                   type="button"
-                  variant="destructive"
+                  variant="ghost"
                   size="sm"
                   onClick={handleLogout}
-                  className="w-full h-10 gap-2 text-xs"
+                  className="w-full h-9 gap-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
                 >
                   <LogOut className="h-4 w-4" /> Sign Out of Connectly
                 </Button>
@@ -476,6 +575,113 @@ export function UserSettingsModal() {
           )}
         </div>
       </div>
+
+      {/* Password Confirmation Dialog for Deactivation & Deletion */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-2xl bg-card border shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                  confirmAction === 'delete'
+                    ? 'bg-rose-500/10 text-rose-500'
+                    : 'bg-amber-500/10 text-amber-500'
+                }`}
+              >
+                {confirmAction === 'delete' ? (
+                  <Trash2 className="h-5 w-5" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  {confirmAction === 'delete'
+                    ? 'Permanently Delete Account?'
+                    : 'Deactivate Account?'}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {confirmAction === 'delete'
+                    ? 'This action cannot be undone.'
+                    : 'You can reactivate by logging back in.'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {confirmAction === 'delete'
+                ? 'To confirm permanent account deletion, please enter your password below:'
+                : 'To confirm temporary account deactivation, please enter your password below:'}
+            </p>
+
+            {actionError && (
+              <div className="rounded-lg bg-destructive/10 text-destructive text-xs p-2.5 font-medium border border-destructive/20">
+                {actionError}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" /> Password Confirmation
+              </label>
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Enter your current password"
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (actionError) setActionError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && confirmPassword.trim() && !isSubmittingAction) {
+                      handleExecuteAccountAction();
+                    }
+                  }}
+                  className="pr-10 text-sm h-10"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSubmittingAction}
+                onClick={() => {
+                  setConfirmAction(null);
+                  setConfirmPassword('');
+                  setActionError('');
+                }}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant={confirmAction === 'delete' ? 'destructive' : 'default'}
+                size="sm"
+                disabled={isSubmittingAction || !confirmPassword.trim()}
+                onClick={handleExecuteAccountAction}
+                className="text-xs gap-1.5"
+              >
+                {isSubmittingAction && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {confirmAction === 'delete' ? 'Delete Account' : 'Deactivate Account'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

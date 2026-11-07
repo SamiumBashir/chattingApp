@@ -99,3 +99,29 @@ export const getBlockedUsers = async (
   }
 };
 
+export const deactivateAccount = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await UserService.deactivateAccount(req.user!.userId, req.body.password);
+    sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteAccount = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const result = await UserService.deleteAccount(req.user!.userId, req.body.password);
+    sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+};
+

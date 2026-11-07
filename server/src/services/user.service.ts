@@ -1,7 +1,10 @@
 import mongoose from 'mongoose';
 import { User } from '../models/User.js';
+import { Session } from '../models/Session.js';
 import { AppError } from '../utils/apiResponse.js';
 import { UpdateProfileInput } from '../validators/user.validator.js';
+import { getSocketGateway } from '../sockets/socketGateway.js';
+import { logger } from '../utils/logger.js';
 
 export class UserService {
   /**
@@ -111,6 +114,80 @@ export class UserService {
       username: b.username,
       avatar: b.avatar,
     }));
+  }
+
+  /**
+   * Deactivate user account (requires password verification)
+   */
+  static async deactivateAccount(userId: string, passwordConfirm: string) {
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+
+    if (user.password) {
+      const isMatch = await user.comparePassword(passwordConfirm);
+      if (!isMatch) {
+        throw new AppError('Incorrect password. Please verify your password to continue.', 401, 'INVALID_PASSWORD');
+      }
+    } else if (user.googleId && !user.password) {
+      if (passwordConfirm.toLowerCase() !== user.email.toLowerCase()) {
+        throw new AppError('Confirmation does not match your account email address.', 401, 'INVALID_CONFIRMATION');
+      }
+    }
+
+    user.status = 'deactivated';
+    await user.save();
+
+    // Revoke all sessions for this user
+    await Session.deleteMany({ user: user._id });
+
+    // Broadcast disconnection and offline status
+    const io = getSocketGateway();
+    if (io) {
+      io.to(`user:${userId}`).emit('auth:terminated', { reason: 'account_deactivated' });
+      io.emit('presence:offline', { userId, lastSeen: new Date().toISOString() });
+    }
+
+    logger.info(`Account deactivated: ${user.username} (${user.id})`);
+    return { success: true, message: 'Account deactivated successfully.' };
+  }
+
+  /**
+   * Permanently delete user account (requires password verification)
+   */
+  static async deleteAccount(userId: string, passwordConfirm: string) {
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+
+    if (user.password) {
+      const isMatch = await user.comparePassword(passwordConfirm);
+      if (!isMatch) {
+        throw new AppError('Incorrect password. Please verify your password to continue.', 401, 'INVALID_PASSWORD');
+      }
+    } else if (user.googleId && !user.password) {
+      if (passwordConfirm.toLowerCase() !== user.email.toLowerCase()) {
+        throw new AppError('Confirmation does not match your account email address.', 401, 'INVALID_CONFIRMATION');
+      }
+    }
+
+    // Revoke all sessions for this user
+    await Session.deleteMany({ user: user._id });
+
+    // Broadcast disconnection
+    const io = getSocketGateway();
+    if (io) {
+      io.to(`user:${userId}`).emit('auth:terminated', { reason: 'account_deleted' });
+      io.emit('presence:offline', { userId, lastSeen: new Date().toISOString() });
+    }
+
+    // Delete user document
+    await User.findByIdAndDelete(userId);
+
+    logger.info(`Account permanently deleted: ${user.username} (${user.id})`);
+    return { success: true, message: 'Account permanently deleted.' };
   }
 }
 

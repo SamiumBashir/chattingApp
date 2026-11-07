@@ -1,7 +1,7 @@
 import { Request } from 'express';
 
 export type UserRole = 'user' | 'admin' | 'superadmin';
-export type UserStatus = 'active' | 'suspended' | 'banned';
+export type UserStatus = 'active' | 'suspended' | 'banned' | 'deactivated';
 
 export interface AuthenticatedUserPayload {
   userId: string;

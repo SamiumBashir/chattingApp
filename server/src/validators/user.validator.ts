@@ -11,6 +11,11 @@ export const searchUsersSchema = z.object({
   limit: z.coerce.number().min(1).max(50).default(20),
 });
 
+export const confirmPasswordSchema = z.object({
+  password: z.string().min(1, 'Password is required to confirm this action'),
+});
+
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type SearchUsersInput = z.infer<typeof searchUsersSchema>;
+export type ConfirmPasswordInput = z.infer<typeof confirmPasswordSchema>;
 

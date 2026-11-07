@@ -22,7 +22,7 @@ import {
   ModerationReport,
   AuditLogItem,
 } from '@/services/admin.service';
-import { User } from '@/types';
+import { User, UserStatus } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,7 +51,7 @@ export default function AdminPage() {
 
   // Status Action Modal State
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [newStatus, setNewStatus] = useState<'active' | 'suspended' | 'banned'>('active');
+  const [newStatus, setNewStatus] = useState<UserStatus>('active');
   const [statusReason, setStatusReason] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
@@ -628,6 +628,7 @@ export default function AdminPage() {
                   <option value="active">Active (Normal Access)</option>
                   <option value="suspended">Suspended (Temporary lockout)</option>
                   <option value="banned">Banned (Permanent lockout & session revoke)</option>
+                  <option value="deactivated">Deactivated (User disabled)</option>
                 </select>
               </div>
 
