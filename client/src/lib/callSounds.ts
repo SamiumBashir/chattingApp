@@ -27,6 +27,16 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
+ * Unlocks Web Audio playback during an active user gesture
+ */
+export function unlockAudioMedia(): void {
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+}
+
+/**
  * Plays a single outgoing ringback pulse (440Hz + 480Hz, 1.8s duration)
  */
 function playRingbackPulse() {

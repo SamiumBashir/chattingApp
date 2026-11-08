@@ -9,6 +9,7 @@ import {
   startIncomingRinging,
   playCallEndSound,
   stopCallSounds,
+  unlockAudioMedia,
 } from '@/lib/callSounds';
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -21,6 +22,32 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun.services.mozilla.com' },
   ],
   iceCandidatePoolSize: 10,
+};
+
+const acquireUserMedia = async (type: CallType): Promise<MediaStream> => {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video:
+        type === 'video'
+          ? {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: 'user',
+            }
+          : false,
+    });
+  } catch (err) {
+    console.warn('Advanced constraints rejected, falling back to basic constraints:', err);
+    return await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: type === 'video',
+    });
+  }
 };
 
 export function useWebRTC() {
@@ -158,22 +185,32 @@ export function useWebRTC() {
 
       // Remote stream track arrived
       pc.ontrack = (event) => {
-        if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-          if (onRemoteStreamAttached) {
-            onRemoteStreamAttached(event.streams[0]);
-          }
-        } else if (event.track) {
-          // Fallback if event.streams is not populated
-          setRemoteStream((prev) => {
-            const stream = prev || new MediaStream();
-            stream.addTrack(event.track);
+        const track = event.track;
+
+        const updateRemoteStream = () => {
+          const incomingStream = event.streams && event.streams[0] ? event.streams[0] : null;
+          setRemoteStream((prevStream) => {
+            const existingTracks = prevStream ? prevStream.getTracks() : [];
+            const incomingTracks = incomingStream ? incomingStream.getTracks() : [track];
+            const trackMap = new Map<string, MediaStreamTrack>();
+            [...existingTracks, ...incomingTracks].forEach((t) => trackMap.set(t.id, t));
+            const newStream = new MediaStream(Array.from(trackMap.values()));
             if (onRemoteStreamAttached) {
-              onRemoteStreamAttached(stream);
+              onRemoteStreamAttached(newStream);
             }
-            return new MediaStream(stream.getTracks());
+            return newStream;
           });
-        }
+        };
+
+        updateRemoteStream();
+
+        track.onunmute = () => {
+          updateRemoteStream();
+        };
+
+        track.onended = () => {
+          updateRemoteStream();
+        };
       };
 
       pc.onconnectionstatechange = () => {
@@ -198,6 +235,7 @@ export function useWebRTC() {
     async (targetPartner: CallPartner, targetConversationId: string, type: CallType) => {
       if (!user) return;
       cleanupMediaAndPeer();
+      unlockAudioMedia();
 
       const socket = getSocket();
       if (!socket || !socket.connected) {
@@ -210,10 +248,7 @@ export function useWebRTC() {
       // Pre-acquire local audio/video hardware stream
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: type === 'video',
-        });
+        stream = await acquireUserMedia(type);
         localStreamRef.current = stream;
         setLocalStream(stream);
       } catch (err: any) {
@@ -279,6 +314,7 @@ export function useWebRTC() {
   // 2. Accept incoming call
   const handleAcceptCall = useCallback(async () => {
     stopCallSounds();
+    unlockAudioMedia();
     if (ringingTimeoutRef.current) {
       clearTimeout(ringingTimeoutRef.current);
       ringingTimeoutRef.current = null;
@@ -291,15 +327,15 @@ export function useWebRTC() {
 
     try {
       // Get user audio/video permissions
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: currentCallType === 'video',
-      });
+      const stream = await acquireUserMedia(currentCallType);
       localStreamRef.current = stream;
       setLocalStream(stream);
 
       const pc = setupPeerConnection(currentPartner.id);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      stream.getTracks().forEach((track) => {
+        track.enabled = true;
+        pc.addTrack(track, stream);
+      });
 
       // Emit accepted
       const socket = getSocket();
@@ -403,6 +439,7 @@ export function useWebRTC() {
     // B. Recipient accepted our call -> Caller creates WebRTC Offer
     const onCallAccepted = async (data: { recipientId: string; callType: CallType }) => {
       stopCallSounds();
+      unlockAudioMedia();
       if (ringingTimeoutRef.current) {
         clearTimeout(ringingTimeoutRef.current);
         ringingTimeoutRef.current = null;
@@ -412,16 +449,16 @@ export function useWebRTC() {
       try {
         let stream = localStreamRef.current;
         if (!stream || stream.getTracks().length === 0) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: data.callType === 'video',
-          });
+          stream = await acquireUserMedia(data.callType);
           localStreamRef.current = stream;
           setLocalStream(stream);
         }
 
         const pc = setupPeerConnection(data.recipientId);
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        stream.getTracks().forEach((track) => {
+          track.enabled = true;
+          pc.addTrack(track, stream!);
+        });
 
         // Create and send WebRTC offer
         const offer = await pc.createOffer({
@@ -451,6 +488,30 @@ export function useWebRTC() {
         pc = setupPeerConnection(data.senderId);
       }
 
+      // Ensure local tracks are attached before answering!
+      let stream = localStreamRef.current;
+      if (!stream || stream.getTracks().length === 0) {
+        const currentCallType = useCallStore.getState().callType;
+        try {
+          stream = await acquireUserMedia(currentCallType);
+          localStreamRef.current = stream;
+          setLocalStream(stream);
+        } catch (err) {
+          console.warn('Could not acquire local stream before answering WebRTC offer:', err);
+        }
+      }
+
+      if (stream) {
+        const senders = pc.getSenders();
+        stream.getTracks().forEach((track) => {
+          track.enabled = true;
+          const exists = senders.some((s) => s.track?.id === track.id);
+          if (!exists) {
+            pc!.addTrack(track, stream!);
+          }
+        });
+      }
+
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
 
@@ -458,7 +519,9 @@ export function useWebRTC() {
         if (pendingCandidatesRef.current.length > 0) {
           for (const cand of pendingCandidatesRef.current) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(cand));
+              if (cand && (cand.candidate || cand.sdpMid !== undefined)) {
+                await pc.addIceCandidate(cand);
+              }
             } catch (e) {
               console.debug('Failed to add queued candidate:', e);
             }
@@ -490,7 +553,9 @@ export function useWebRTC() {
         if (pendingCandidatesRef.current.length > 0) {
           for (const cand of pendingCandidatesRef.current) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(cand));
+              if (cand && (cand.candidate || cand.sdpMid !== undefined)) {
+                await pc.addIceCandidate(cand);
+              }
             } catch (e) {
               console.debug('Failed to add queued candidate:', e);
             }
@@ -510,7 +575,9 @@ export function useWebRTC() {
       const pc = peerConnectionRef.current;
       if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          if (data.candidate && (data.candidate.candidate || data.candidate.sdpMid !== undefined)) {
+            await pc.addIceCandidate(data.candidate);
+          }
         } catch (e) {
           console.debug('Error adding incoming ICE candidate:', e);
         }

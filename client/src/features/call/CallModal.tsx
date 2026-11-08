@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone,
   PhoneOff,
@@ -9,10 +9,12 @@ import {
   Mic,
   MicOff,
   AlertCircle,
+  Volume2,
 } from 'lucide-react';
 import { useCall } from './CallContext';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export function CallModal() {
   const {
@@ -35,25 +37,64 @@ export function CallModal() {
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
-  // Attach remote stream to audio/video elements
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(() => {});
+  const hasRemoteVideo = Boolean(
+    remoteStream &&
+      remoteStream.getVideoTracks().length > 0 &&
+      remoteStream.getVideoTracks().some((t) => t.enabled)
+  );
+
+  // Dedicated handler to manually unblock audio on user gesture
+  const handleUnblockAudio = () => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current
+        .play()
+        .then(() => setIsAudioBlocked(false))
+        .catch(() => {});
     }
-    // Only use separate audio element for audio-only calls to avoid double-audio echo on video calls
-    if (remoteAudioRef.current && remoteStream && callType === 'audio') {
-      remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.play().catch(() => {});
+  };
+
+  // Attach remote stream to audio element (handles sound for both voice and video calls)
+  useEffect(() => {
+    const audioEl = remoteAudioRef.current;
+    if (audioEl && remoteStream && callState === 'connected') {
+      if (audioEl.srcObject !== remoteStream) {
+        audioEl.srcObject = remoteStream;
+      }
+      audioEl
+        .play()
+        .then(() => {
+          setIsAudioBlocked(false);
+        })
+        .catch((err) => {
+          console.warn('Audio playback blocked by browser Autoplay Policy:', err);
+          setIsAudioBlocked(true);
+        });
+    }
+  }, [remoteStream, callState]);
+
+  // Attach remote stream to video element for video calls (muted to bypass Autoplay restrictions)
+  useEffect(() => {
+    const videoEl = remoteVideoRef.current;
+    if (videoEl && remoteStream && callType === 'video' && callState === 'connected') {
+      if (videoEl.srcObject !== remoteStream) {
+        videoEl.srcObject = remoteStream;
+      }
+      videoEl.play().catch((err) => {
+        console.warn('Remote video playback warning:', err);
+      });
     }
   }, [remoteStream, callState, callType]);
 
   // Attach local stream to preview element
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(() => {});
+    const localEl = localVideoRef.current;
+    if (localEl && localStream) {
+      if (localEl.srcObject !== localStream) {
+        localEl.srcObject = localStream;
+      }
+      localEl.play().catch(() => {});
     }
   }, [localStream, callState, isVideoOff]);
 
@@ -62,9 +103,34 @@ export function CallModal() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center select-none animate-in fade-in duration-200">
-      {/* Audio element active for voice calls to guarantee voice playback without echo */}
-      {callType === 'audio' && <audio ref={remoteAudioRef} autoPlay playsInline />}
+    <div
+      onClick={() => {
+        if (isAudioBlocked) {
+          handleUnblockAudio();
+        }
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center select-none animate-in fade-in duration-200"
+    >
+      {/* Remote audio playback for all connected calls (voice and video) */}
+      {callState === 'connected' && (
+        <audio ref={remoteAudioRef} autoPlay playsInline />
+      )}
+
+      {/* Floating browser autoplay unblock notification banner */}
+      {callState === 'connected' && isAudioBlocked && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleUnblockAudio();
+          }}
+          className="fixed top-6 z-50 cursor-pointer flex items-center gap-2.5 rounded-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold px-5 py-2.5 shadow-2xl animate-bounce transition-all text-xs sm:text-sm"
+        >
+          <Volume2 className="h-4 w-4 shrink-0" />
+          <span>Click here to enable call audio</span>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* 1. INCOMING CALL SCREEN */}
@@ -279,14 +345,19 @@ export function CallModal() {
         <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col items-center justify-center">
           {/* Main Remote Video Container */}
           <div className="relative h-full w-full flex items-center justify-center bg-black overflow-hidden">
-            {remoteStream ? (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="h-full w-full object-cover"
-              />
-            ) : (
+            {/* Remote video element always kept in DOM so WebRTC stream and hardware decoders don't get unmounted */}
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className={cn(
+                'h-full w-full object-cover transition-opacity duration-300',
+                hasRemoteVideo ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
+              )}
+            />
+
+            {!hasRemoteVideo && (
               <div className="flex flex-col items-center justify-center gap-4 text-white">
                 <Avatar
                   src={partner?.avatar}
@@ -320,19 +391,21 @@ export function CallModal() {
 
             {/* Picture-in-Picture Local Video Preview */}
             <div className="absolute top-4 right-4 sm:top-6 sm:right-6 w-28 h-40 sm:w-44 sm:h-60 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-zinc-900 z-30">
-              {isVideoOff ? (
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={cn(
+                  'h-full w-full object-cover -scale-x-100',
+                  isVideoOff && 'hidden'
+                )}
+              />
+              {isVideoOff && (
                 <div className="flex flex-col items-center justify-center h-full w-full bg-zinc-900 text-white gap-2 p-2 text-center">
                   <VideoOff className="h-6 w-6 text-zinc-500" />
                   <span className="text-[11px] text-zinc-400">Camera off</span>
                 </div>
-              ) : (
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="h-full w-full object-cover -scale-x-100"
-                />
               )}
             </div>
 
