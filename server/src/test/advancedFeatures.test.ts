@@ -7,6 +7,9 @@ import { Notification } from '../models/Notification';
 import { Message } from '../models/Message';
 import { Conversation } from '../models/Conversation';
 import { generateAccessToken } from '../utils/token';
+import { validateUploadedFile, sanitizeFileName, escapeRegex } from '../utils/fileValidation';
+import { EmailService } from '../services/email.service.js';
+import { NotificationService } from '../services/notification.service.js';
 import mongoose from 'mongoose';
 
 vi.mock('../models/User');
@@ -93,6 +96,148 @@ describe('Phase 6: Advanced Features (Uploads, Notifications, Message Search)', 
       expect([200, 201]).toContain(res.status);
       expect(res.body.success).toBe(true);
       expect(res.body.data.attachment.fileName).toBe('test.txt');
+    });
+
+    it('rejects direct upload with dangerous executable extension (.exe)', async () => {
+      const res = await request(app)
+        .post('/api/v1/uploads/direct')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from('MZ executable binary'), 'malware.exe');
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UNSUPPORTED_FILE_TYPE');
+    });
+
+    it('rejects direct upload with SVG file to prevent script injection', async () => {
+      const res = await request(app)
+        .post('/api/v1/uploads/direct')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from('<svg><script>alert(1)</script></svg>'), 'vector.svg');
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UNSUPPORTED_FILE_TYPE');
+    });
+
+    it('sanitizes directory traversal sequences in uploaded filename', async () => {
+      const res = await request(app)
+        .post('/api/v1/uploads/direct')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from('safe document content'), '../../passwords.txt');
+
+      expect([200, 201]).toContain(res.status);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.attachment.fileName).toBe('passwords.txt');
+      expect(res.body.data.attachment.fileName).not.toContain('..');
+    });
+
+    it('rejects complete upload with javascript: pseudo-protocol URL', async () => {
+      const res = await request(app)
+        .post('/api/v1/uploads/complete')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          url: 'javascript:alert(document.cookie)',
+          publicId: 'test_id',
+          fileName: 'doc.pdf',
+          fileType: 'application/pdf',
+          fileSize: 1024,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects complete upload with dangerous executable file extension', async () => {
+      const res = await request(app)
+        .post('/api/v1/uploads/complete')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          url: 'https://res.cloudinary.com/demo/raw/upload/trojan.exe',
+          publicId: 'demo/trojan',
+          fileName: 'trojan.exe',
+          fileType: 'application/x-msdownload',
+          fileSize: 10240,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects complete upload when image size exceeds 10MB limit', async () => {
+      const res = await request(app)
+        .post('/api/v1/uploads/complete')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          url: 'https://res.cloudinary.com/demo/image/upload/huge.jpg',
+          publicId: 'demo/huge',
+          fileName: 'huge.jpg',
+          fileType: 'image/jpeg',
+          fileSize: 15 * 1024 * 1024, // 15MB > 10MB limit
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects delete asset when publicId contains injection characters', async () => {
+      const res = await request(app)
+        .delete('/api/v1/uploads/invalid*regex?id!')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('INVALID_PUBLIC_ID');
+    });
+  });
+
+  describe('File Validation & Security Utilities', () => {
+    it('validateUploadedFile rejects dangerous executable extensions', () => {
+      expect(validateUploadedFile('script.sh', 'text/x-sh').valid).toBe(false);
+      expect(validateUploadedFile('run.bat', 'application/x-bat').valid).toBe(false);
+      expect(validateUploadedFile('binary.exe', 'application/x-msdownload').valid).toBe(false);
+      expect(validateUploadedFile('vector.svg', 'image/svg+xml').valid).toBe(false);
+    });
+
+    it('validateUploadedFile rejects extension-to-MIME mismatch', () => {
+      // Disguised .png with audio mime
+      const res1 = validateUploadedFile('picture.png', 'audio/mp3');
+      expect(res1.valid).toBe(false);
+      expect(res1.code).toBe('MIME_EXTENSION_MISMATCH');
+
+      // Disguised .mp3 with image mime
+      const res2 = validateUploadedFile('audio.mp3', 'image/jpeg');
+      expect(res2.valid).toBe(false);
+      expect(res2.code).toBe('MIME_EXTENSION_MISMATCH');
+    });
+
+    it('validateUploadedFile enforces 10MB image limit and 25MB file limit', () => {
+      // Valid image under 10MB
+      expect(validateUploadedFile('photo.jpg', 'image/jpeg', 5 * 1024 * 1024).valid).toBe(true);
+
+      // Image exceeding 10MB
+      const imgRes = validateUploadedFile('photo.jpg', 'image/jpeg', 11 * 1024 * 1024);
+      expect(imgRes.valid).toBe(false);
+      expect(imgRes.code).toBe('IMAGE_TOO_LARGE');
+
+      // Valid PDF document under 25MB
+      expect(validateUploadedFile('report.pdf', 'application/pdf', 20 * 1024 * 1024).valid).toBe(true);
+
+      // Document exceeding 25MB
+      const docRes = validateUploadedFile('report.pdf', 'application/pdf', 26 * 1024 * 1024);
+      expect(docRes.valid).toBe(false);
+      expect(docRes.code).toBe('FILE_TOO_LARGE');
+    });
+
+    it('sanitizeFileName strips path traversal and control characters', () => {
+      expect(sanitizeFileName('../../etc/passwd.txt')).toBe('passwd.txt');
+      expect(sanitizeFileName('..\\..\\windows\\system32\\calc.txt')).toBe('calc.txt');
+      expect(sanitizeFileName('safe_name.png')).toBe('safe_name.png');
+      expect(sanitizeFileName('file\x00with\x1Fnull.txt')).toBe('filewithnull.txt');
+      expect(sanitizeFileName('file<name>with:bad*chars.txt')).toBe('file_name_with_bad_chars.txt');
     });
   });
 
@@ -198,6 +343,37 @@ describe('Phase 6: Advanced Features (Uploads, Notifications, Message Search)', 
       expect(res.body.success).toBe(true);
       expect(res.body.data.messages).toHaveLength(1);
       expect(res.body.data.messages[0].content).toContain('meeting');
+    });
+  });
+
+  describe('Email & Background Notification Delivery', () => {
+    it('EmailService.sendVerificationEmail dispatches verification link', async () => {
+      const result = await EmailService.sendVerificationEmail({
+        to: 'newuser@example.com',
+        name: 'New User',
+        token: 'verify-token-12345',
+      });
+      expect(result.sent).toBe(true);
+    });
+
+    it('EmailService.sendPasswordResetEmail dispatches password reset link', async () => {
+      const result = await EmailService.sendPasswordResetEmail({
+        to: 'existing@example.com',
+        name: 'Existing User',
+        token: 'reset-token-67890',
+      });
+      expect(result.sent).toBe(true);
+    });
+
+    it('NotificationService.createNotification skips self-notifications', async () => {
+      const selfNotif = await NotificationService.createNotification({
+        recipientId: mockUserId,
+        actorId: mockUserId, // same user!
+        type: 'message',
+        title: 'Self action',
+        body: 'You did something',
+      });
+      expect(selfNotif).toBeNull();
     });
   });
 });

@@ -18,6 +18,11 @@ export class NotificationService {
    * Create a new notification and emit real-time event
    */
   static async createNotification(params: CreateNotificationParams): Promise<INotification> {
+    // Do not notify a user about their own actions
+    if (params.actorId && params.actorId === params.recipientId) {
+      return null as any;
+    }
+
     const notification = await Notification.create({
       recipient: new Types.ObjectId(params.recipientId),
       actor: params.actorId ? new Types.ObjectId(params.actorId) : undefined,

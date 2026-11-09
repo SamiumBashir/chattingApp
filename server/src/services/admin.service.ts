@@ -7,6 +7,7 @@ import { Report } from '../models/Report.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { AppError } from '../utils/apiResponse.js';
 import { UpdateReportInput, CreateReportInput } from '../validators/admin.validator.js';
+import { disconnectUserSockets } from '../sockets/socketGateway.js';
 
 export class AdminService {
   /**
@@ -136,11 +137,15 @@ export class AdminService {
     targetUser.status = newStatus;
     await targetUser.save();
 
-    // Revoke active sessions if account is suspended or banned
+    // Revoke active sessions and disconnect live sockets if account is suspended or banned
     if (newStatus === 'banned' || newStatus === 'suspended') {
       await Session.updateMany(
         { user: targetUser._id, revokedAt: { $exists: false } },
         { $set: { revokedAt: new Date() } }
+      );
+      disconnectUserSockets(
+        targetUser.id,
+        newStatus === 'banned' ? 'ACCOUNT_BANNED' : 'ACCOUNT_SUSPENDED'
       );
     }
 

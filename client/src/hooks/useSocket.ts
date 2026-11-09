@@ -60,6 +60,11 @@ export function useSocket() {
     const handleReturnToTab = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         resetTabTitle();
+        const activeId = useChatStore.getState().activeConversationId;
+        if (activeId) {
+          socket.emit('conversation:read', { conversationId: activeId });
+          useNotificationStore.getState().markConversationNotificationsAsRead(activeId);
+        }
       }
     };
 
@@ -228,7 +233,20 @@ export function useSocket() {
     };
 
     const handleConversationRead = (data: { conversationId: string; userId: string }) => {
-      if (data.userId !== user.id) {
+      if (data.userId === user.id) {
+        // Multi-device sync: User marked conversation read on another device/tab
+        useChatStore.setState((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id === data.conversationId ? { ...c, unreadCount: 0 } : c
+          ),
+          activeConversation:
+            state.activeConversation?.id === data.conversationId
+              ? { ...state.activeConversation, unreadCount: 0 }
+              : state.activeConversation,
+        }));
+        useNotificationStore.getState().markConversationNotificationsAsRead(data.conversationId);
+      } else {
+        // Peer read our messages: mark sent messages in this conversation as 'read'
         const state = useChatStore.getState();
         const currentList = state.messagesByConversation[data.conversationId] || [];
         const updated = currentList.map((m) =>
@@ -240,6 +258,14 @@ export function useSocket() {
             [data.conversationId]: updated,
           },
         }));
+      }
+    };
+
+    const handleAuthRevoked = () => {
+      disconnectSocket();
+      useAuthStore.getState().logout().catch(() => {});
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
       }
     };
 
@@ -255,6 +281,7 @@ export function useSocket() {
     socket.on('notification:new', handleNewNotification);
     socket.on('notification:read', handleNotificationRead);
     socket.on('notification:count', handleNotificationCount);
+    socket.on('auth:revoked', handleAuthRevoked);
 
     // Initial presence check for peers
     const allPeerUserIds = conversations
@@ -290,6 +317,7 @@ export function useSocket() {
       socket.off('notification:new', handleNewNotification);
       socket.off('notification:read', handleNotificationRead);
       socket.off('notification:count', handleNotificationCount);
+      socket.off('auth:revoked', handleAuthRevoked);
     };
   }, [
     isAuthenticated,

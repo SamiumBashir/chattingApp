@@ -62,6 +62,19 @@ export class MessageService {
       };
     }
 
+    // Validate replyTo target to prevent cross-conversation reply leaks
+    let replyToObjectId: mongoose.Types.ObjectId | null = null;
+    if (input.replyTo) {
+      if (!mongoose.Types.ObjectId.isValid(input.replyTo)) {
+        throw new AppError('Invalid replyTo message ID', 400, 'INVALID_REPLY_ID');
+      }
+      const replyTarget = await Message.findById(input.replyTo);
+      if (!replyTarget || replyTarget.conversation.toString() !== input.conversationId) {
+        throw new AppError('Cannot reply to a message from a different conversation', 400, 'CROSS_CONVERSATION_REPLY_FORBIDDEN');
+      }
+      replyToObjectId = replyTarget._id;
+    }
+
     // Ensure message has text content or attachments
     const attachments = input.attachments || [];
     if (!input.content?.trim() && attachments.length === 0 && input.type !== 'system') {
@@ -73,15 +86,40 @@ export class MessageService {
       secureUrl: att.secureUrl || att.url,
     }));
 
-    const message = await Message.create({
-      conversation: new mongoose.Types.ObjectId(input.conversationId),
-      sender: new mongoose.Types.ObjectId(senderId),
-      clientMessageId: input.clientMessageId,
-      content: input.content || '',
-      type: input.type || 'text',
-      attachments: sanitizedAttachments,
-      replyTo: input.replyTo ? new mongoose.Types.ObjectId(input.replyTo) : null,
-    });
+    let message: any;
+    try {
+      message = await Message.create({
+        conversation: new mongoose.Types.ObjectId(input.conversationId),
+        sender: new mongoose.Types.ObjectId(senderId),
+        clientMessageId: input.clientMessageId,
+        content: input.content || '',
+        type: input.type || 'text',
+        attachments: sanitizedAttachments,
+        replyTo: replyToObjectId,
+      });
+    } catch (createErr: any) {
+      // Handle concurrent race-condition retries where compound unique index caught duplicate
+      if (createErr?.code === 11000) {
+        const dupMessage = await Message.findOne({
+          conversation: input.conversationId,
+          clientMessageId: input.clientMessageId,
+        });
+        if (dupMessage) {
+          await dupMessage.populate('sender', 'name username avatar');
+          if (dupMessage.replyTo) {
+            await dupMessage.populate('replyTo', 'content sender type');
+          }
+          return {
+            message: dupMessage.toJSON(),
+            recipientIds: conversation.participants
+              .map((p) => p.user.toString())
+              .filter((id) => id !== senderId),
+            isDuplicate: true,
+          };
+        }
+      }
+      throw createErr;
+    }
 
     const firstAtt = sanitizedAttachments[0];
     const previewContent =
@@ -194,7 +232,6 @@ export class MessageService {
 
     const query: Record<string, unknown> = {
       conversation: new mongoose.Types.ObjectId(conversationId),
-      isDeleted: false,
     };
 
     if (cursor) {
@@ -235,22 +272,22 @@ export class MessageService {
   }
 
   /**
-   * Mark message as delivered for user
+   * Mark message as delivered for user (can only transition from 'sent' to 'delivered')
    */
   static async markDelivered(messageId: string, userId: string) {
     return MessageReceipt.findOneAndUpdate(
-      { message: messageId, user: userId },
+      { message: messageId, user: userId, status: 'sent' },
       { status: 'delivered', deliveredAt: new Date() },
       { new: true }
     );
   }
 
   /**
-   * Mark message as read for user
+   * Mark message as read for user (transitions from 'sent' or 'delivered' to 'read')
    */
   static async markRead(messageId: string, userId: string) {
     const receipt = await MessageReceipt.findOneAndUpdate(
-      { message: messageId, user: userId },
+      { message: messageId, user: userId, status: { $ne: 'read' } },
       { status: 'read', readAt: new Date() },
       { new: true }
     );
@@ -266,7 +303,7 @@ export class MessageService {
   }
 
   /**
-   * Edit message content (sender only)
+   * Edit message content (sender only, within 24 hours, non-deleted)
    */
   static async editMessage(messageId: string, userId: string, newContent: string) {
     const message = await Message.findById(messageId);
@@ -282,7 +319,25 @@ export class MessageService {
       throw new AppError('Cannot edit a deleted message', 400, 'MESSAGE_DELETED');
     }
 
-    message.content = newContent;
+    if (!newContent || !newContent.trim()) {
+      throw new AppError('Message content cannot be empty', 400, 'EMPTY_MESSAGE');
+    }
+
+    if (newContent.length > 5000) {
+      throw new AppError('Message content cannot exceed 5000 characters', 400, 'CONTENT_TOO_LONG');
+    }
+
+    // 24-hour edit window
+    const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+    if (message.createdAt && Date.now() - message.createdAt.getTime() > EDIT_WINDOW_MS) {
+      throw new AppError(
+        'Message edit window has expired (cannot edit messages older than 24 hours)',
+        400,
+        'EDIT_WINDOW_EXPIRED'
+      );
+    }
+
+    message.content = newContent.trim();
     message.isEdited = true;
     message.editedAt = new Date();
     await message.save();
@@ -306,9 +361,9 @@ export class MessageService {
 
     let isAuthorized = message.sender.toString() === userId;
 
-    if (!isAuthorized) {
-      const conversation = await Conversation.findById(message.conversation);
-      const role = conversation?.getParticipantRole(userId);
+    const conversation = await Conversation.findById(message.conversation);
+    if (!isAuthorized && conversation) {
+      const role = conversation.getParticipantRole(userId);
       isAuthorized = role === 'owner' || role === 'admin';
     }
 
@@ -323,6 +378,12 @@ export class MessageService {
     message.reactions = [];
     await message.save();
 
+    // If deleted message was the conversation cached lastMessage, update it to tombstone
+    if (conversation && conversation.lastMessage?.messageId?.toString() === messageId) {
+      conversation.lastMessage.content = 'This message was deleted';
+      await conversation.save().catch(() => {});
+    }
+
     return {
       messageId: message.id,
       conversationId: message.conversation.toString(),
@@ -335,6 +396,10 @@ export class MessageService {
    * Add or update an emoji reaction on a message
    */
   static async addReaction(messageId: string, userId: string, emoji: string) {
+    if (!emoji || !emoji.trim() || emoji.trim().length > 16) {
+      throw new AppError('Invalid emoji reaction', 400, 'INVALID_EMOJI');
+    }
+
     const message = await Message.findById(messageId);
     if (!message) {
       throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
@@ -354,19 +419,19 @@ export class MessageService {
       );
     }
 
-    // Check if user already reacted
+    const trimmedEmoji = emoji.trim();
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const existingIndex = message.reactions.findIndex(
       (r) => r.user.toString() === userId
     );
 
     if (existingIndex >= 0) {
-      message.reactions[existingIndex].emoji = emoji;
+      message.reactions[existingIndex].emoji = trimmedEmoji;
       message.reactions[existingIndex].createdAt = new Date();
     } else {
       message.reactions.push({
         user: userObjectId,
-        emoji,
+        emoji: trimmedEmoji,
         createdAt: new Date(),
       });
     }

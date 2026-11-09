@@ -1,9 +1,10 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest, UserRole } from '../types/index.js';
 import { verifyAccessToken } from '../utils/token.js';
 import { AppError } from '../utils/apiResponse.js';
 import { User } from '../models/User.js';
 import { Session } from '../models/Session.js';
+import { getAllowedOrigins, env } from '../config/env.js';
 
 export const authenticate = async (
   req: AuthenticatedRequest,
@@ -104,6 +105,48 @@ export const requireVerified = async (
         403,
         'EMAIL_NOT_VERIFIED'
       )
+    );
+  }
+
+  next();
+};
+
+/**
+ * CSRF origin validation for mutating cookie-authenticated endpoints
+ */
+export const validateCsrfOrigin = (req: Request, _res: Response, next: NextFunction): void => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  const originHeader = req.headers.origin;
+  const refererHeader = req.headers.referer;
+  let origin = originHeader;
+
+  if (!origin && refererHeader) {
+    try {
+      origin = new URL(refererHeader).origin;
+    } catch {
+      origin = undefined;
+    }
+  }
+
+  // If request has no Origin/Referer (e.g. non-browser tools or test environment without cookie)
+  if (!origin) {
+    if (env.NODE_ENV === 'test' || !req.cookies?.refreshToken) {
+      return next();
+    }
+    return next(
+      new AppError('Cross-Site Request Forgery blocked: Missing Origin header', 403, 'CSRF_BLOCKED')
+    );
+  }
+
+  const allowed = getAllowedOrigins();
+  const normalizedOrigin = origin.replace(/\/+$/, '');
+
+  if (!allowed.includes(normalizedOrigin)) {
+    return next(
+      new AppError(`Cross-Site Request Forgery blocked: Unauthorized origin ${origin}`, 403, 'CSRF_BLOCKED')
     );
   }
 

@@ -14,6 +14,7 @@ import {
 } from '../validators/auth.validator.js';
 import { User } from '../models/User.js';
 import { Session } from '../models/Session.js';
+import { validateCsrfOrigin } from '../middlewares/auth.js';
 
 describe('Phase 2 — Authentication System', () => {
   const app = createApp();
@@ -161,6 +162,8 @@ describe('Phase 2 — Authentication System', () => {
 
     beforeEach(() => {
       vi.restoreAllMocks();
+      mockSession.revokedAt = null;
+      mockSession.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     });
 
     it('authenticates user and returns access token on valid login', async () => {
@@ -269,6 +272,147 @@ describe('Phase 2 — Authentication System', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.revoked).toBe(true);
+    });
+
+    it('rejects POST /api/v1/auth/refresh when refreshToken cookie is missing with 401', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: 'body_token_should_be_ignored' });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('REFRESH_TOKEN_REQUIRED');
+    });
+
+    it('detects refresh token reuse / replay and revokes all user sessions', async () => {
+      const rawOldToken = 'previously_rotated_token';
+      const oldHashed = hashToken(rawOldToken);
+
+      const compromisedSession = {
+        ...mockSession,
+        user: mockUser.id,
+        previousTokenHashes: [oldHashed],
+      };
+
+      // Step 1: findOne by active token returns null
+      // Step 2: findOne by previousTokenHashes returns compromisedSession
+      vi.spyOn(Session, 'findOne')
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(compromisedSession as any);
+
+      const updateManySpy = vi.spyOn(Session, 'updateMany').mockResolvedValue({} as any);
+
+      const res = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [`refreshToken=${rawOldToken}`]);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('SESSION_COMPROMISED');
+      expect(updateManySpy).toHaveBeenCalledWith(
+        { user: compromisedSession.user },
+        { $set: { revokedAt: expect.any(Date) } }
+      );
+    });
+
+    it('rejects refresh when session has expired with 401 SESSION_EXPIRED', async () => {
+      const rawToken = 'expired_raw_token';
+      const hashed = hashToken(rawToken);
+
+      const expiredSession = {
+        ...mockSession,
+        refreshTokenHash: hashed,
+        expiresAt: new Date(Date.now() - 60000), // 1 minute ago
+      };
+
+      vi.spyOn(Session, 'findOne').mockResolvedValue(expiredSession as any);
+      vi.spyOn(User, 'findById').mockResolvedValue(mockUser as any);
+
+      const res = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [`refreshToken=${rawToken}`]);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('SESSION_EXPIRED');
+    });
+
+    it('rejects refresh when session is already revoked and revokes all user sessions', async () => {
+      const rawToken = 'revoked_raw_token';
+      const hashed = hashToken(rawToken);
+
+      const revokedSession = {
+        ...mockSession,
+        user: mockUser.id,
+        refreshTokenHash: hashed,
+        revokedAt: new Date(Date.now() - 60000),
+      };
+
+      vi.spyOn(Session, 'findOne').mockResolvedValue(revokedSession as any);
+      const updateManySpy = vi.spyOn(Session, 'updateMany').mockResolvedValue({} as any);
+
+      const res = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [`refreshToken=${rawToken}`]);
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('SESSION_COMPROMISED');
+      expect(updateManySpy).toHaveBeenCalledWith(
+        { user: revokedSession.user },
+        { $set: { revokedAt: expect.any(Date) } }
+      );
+    });
+
+    it('logs out from all devices via POST /api/v1/auth/logout-all', async () => {
+      vi.spyOn(User, 'findById').mockResolvedValue(mockUser as any);
+      vi.spyOn(Session, 'findById').mockResolvedValue(mockSession as any);
+      const updateManySpy = vi.spyOn(Session, 'updateMany').mockResolvedValue({} as any);
+
+      const token = generateAccessToken({
+        userId: mockUser.id,
+        email: mockUser.email,
+        username: mockUser.username,
+        role: 'user',
+        sessionId: mockSession.id,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/auth/logout-all')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Origin', 'http://localhost:3000');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(updateManySpy).toHaveBeenCalledWith(
+        { user: mockUser.id, revokedAt: null },
+        { $set: { revokedAt: expect.any(Date) } }
+      );
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'][0]).toContain('refreshToken=;');
+    });
+
+    it('blocks CSRF on mutating cookie endpoint when Origin is unauthorized', () => {
+      const reqMock: any = {
+        method: 'POST',
+        headers: {
+          origin: 'https://evil-unauthorized-site.com',
+        },
+        cookies: {
+          refreshToken: 'mock_token',
+        },
+      };
+      const resMock: any = {};
+      let caughtError: any = null;
+      const nextMock = (err?: any) => {
+        caughtError = err;
+      };
+
+      validateCsrfOrigin(reqMock, resMock, nextMock);
+
+      expect(caughtError).toBeDefined();
+      expect(caughtError.statusCode).toBe(403);
+      expect(caughtError.code).toBe('CSRF_BLOCKED');
     });
 
     describe('Google OAuth Endpoints', () => {

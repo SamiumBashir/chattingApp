@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users,
   MessageSquare,
@@ -55,22 +55,7 @@ export default function AdminPage() {
   const [statusReason, setStatusReason] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Initial load
-  useEffect(() => {
-    loadOverview();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'users') {
-      loadUsers();
-    } else if (activeTab === 'reports') {
-      loadReports();
-    } else if (activeTab === 'logs') {
-      loadLogs();
-    }
-  }, [activeTab, userStatusFilter, reportStatusFilter]);
-
-  const loadOverview = async () => {
+  const loadOverview = useCallback(async () => {
     setIsLoadingOverview(true);
     try {
       const data = await adminService.getOverview();
@@ -80,9 +65,9 @@ export default function AdminPage() {
     } finally {
       setIsLoadingOverview(false);
     }
-  };
+  }, []);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
       const data = await adminService.getUsers({
@@ -96,9 +81,9 @@ export default function AdminPage() {
     } finally {
       setIsLoadingUsers(false);
     }
-  };
+  }, [userSearch, userStatusFilter]);
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     setIsLoadingReports(true);
     try {
       const data = await adminService.getReports({
@@ -111,9 +96,9 @@ export default function AdminPage() {
     } finally {
       setIsLoadingReports(false);
     }
-  };
+  }, [reportStatusFilter]);
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setIsLoadingLogs(true);
     try {
       const data = await adminService.getAuditLogs({ limit: 50 });
@@ -123,7 +108,22 @@ export default function AdminPage() {
     } finally {
       setIsLoadingLogs(false);
     }
-  };
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadOverview();
+  }, [loadOverview]);
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      loadUsers();
+    } else if (activeTab === 'reports') {
+      loadReports();
+    } else if (activeTab === 'logs') {
+      loadLogs();
+    }
+  }, [activeTab, loadUsers, loadReports, loadLogs]);
 
   const handleUpdateUserStatus = async () => {
     if (!selectedUser) return;

@@ -169,8 +169,25 @@ export function MessageComposer({ conversationId, currentUser }: MessageComposer
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
     setUploadError(null);
+
+    // Pre-flight validation
+    const blockedExts = ['.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.js', '.svg'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (blockedExts.includes(ext)) {
+      setUploadError(`Executable and script files (${ext}) cannot be uploaded for security reasons.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
+    if (file.size > MAX_FILE_BYTES) {
+      setUploadError(`File size (${formatBytes(file.size)}) exceeds the 25 MB limit.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploading(true);
     try {
       const uploaded = await uploadService.uploadFile(file, 'connectly/attachments');
       setAttachments((prev) => [...prev, uploaded]);

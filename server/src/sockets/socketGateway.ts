@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import { AuthenticatedSocket, socketAuthMiddleware } from './socketAuth.middleware.js';
 import { MessageService } from '../services/message.service.js';
@@ -12,6 +13,23 @@ import { sendMessageSchema } from '../validators/message.validator.js';
 // Map tracking active socket connections per user for presence management
 export const activeUserSockets = new Map<string, Set<string>>();
 
+// Rate limiting map: socketId -> timestamp[]
+const socketEventTimestamps = new Map<string, number[]>();
+const MAX_EVENTS_PER_WINDOW = 60;
+const WINDOW_MS = 5000;
+
+export const checkSocketRateLimit = (socketId: string): boolean => {
+  const now = Date.now();
+  const timestamps = socketEventTimestamps.get(socketId) || [];
+  const validTimestamps = timestamps.filter((t) => now - t < WINDOW_MS);
+  if (validTimestamps.length >= MAX_EVENTS_PER_WINDOW) {
+    return false; // Rate limit exceeded
+  }
+  validTimestamps.push(now);
+  socketEventTimestamps.set(socketId, validTimestamps);
+  return true;
+};
+
 // In-memory map for ephemeral typing timeouts per conversation per user
 // Key: `${conversationId}_${userId}`
 const typingTimeouts = new Map<string, NodeJS.Timeout>();
@@ -20,7 +38,9 @@ const typingTimeouts = new Map<string, NodeJS.Timeout>();
 export interface ActiveCallSession {
   callId: string;
   callerId: string;
+  callerSocketId?: string;
   recipientId: string;
+  recipientSocketId?: string;
   conversationId: string;
   callType: 'audio' | 'video';
   status: 'ringing' | 'connected';
@@ -50,6 +70,53 @@ export const getSocketGateway = (): SocketIOServer | null => {
   return globalIo;
 };
 
+/**
+ * Force disconnect all active socket connections for a given user (e.g. on ban or logout-all)
+ */
+export const disconnectUserSockets = (userId: string, reason = 'SESSION_REVOKED'): void => {
+  if (!globalIo) return;
+  if (typeof (globalIo.to as any) === 'function') {
+    globalIo.to(`user:${userId}`).emit('auth:revoked', { reason });
+  }
+  if (typeof (globalIo.in as any) === 'function') {
+    try {
+      (globalIo.in(`user:${userId}`) as any).disconnectSockets(true);
+    } catch {}
+  }
+  const socketIds = activeUserSockets.get(userId);
+  if (socketIds) {
+    Array.from(socketIds).forEach((socketId) => {
+      const socket = globalIo?.sockets?.sockets?.get(socketId);
+      if (socket) {
+        socket.emit('auth:revoked', { reason });
+        socket.disconnect(true);
+      }
+    });
+  }
+};
+
+/**
+ * Force disconnect all active socket connections for a specific session across cluster
+ */
+export const disconnectSessionSockets = (sessionId: string, reason = 'SESSION_REVOKED'): void => {
+  if (!globalIo) return;
+  if (typeof (globalIo.to as any) === 'function') {
+    globalIo.to(`session:${sessionId}`).emit('auth:revoked', { reason });
+  }
+  if (typeof (globalIo.in as any) === 'function') {
+    try {
+      (globalIo.in(`session:${sessionId}`) as any).disconnectSockets(true);
+    } catch {}
+  }
+  globalIo.sockets?.sockets?.forEach((socket) => {
+    const authSocket = socket as AuthenticatedSocket;
+    if (authSocket.data?.user?.sessionId === sessionId) {
+      socket.emit('auth:revoked', { reason });
+      socket.disconnect(true);
+    }
+  });
+};
+
 export const setupSocketGateway = (io: SocketIOServer): void => {
   globalIo = io;
   // Apply JWT authentication middleware to all connections
@@ -70,8 +137,11 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     }
     activeUserSockets.get(userId)!.add(socket.id);
 
-    // Join personal user room for direct events / multi-device sync
+    // Join personal user room and session room for direct events / multi-device & cluster sync
     socket.join(`user:${userId}`);
+    if (user.sessionId) {
+      socket.join(`session:${user.sessionId}`);
+    }
 
     // Query online presence for a list of users
     socket.on('presence:subscribe', (data: { userIds: string[] }, callback) => {
@@ -89,6 +159,20 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     // Join conversation room (verifies membership in MongoDB)
     socket.on('conversation:join', async (data: { conversationId: string }, callback) => {
       try {
+        if (!checkSocketRateLimit(socket.id)) {
+          if (callback) callback({ success: false, error: 'Rate limit exceeded' });
+          return;
+        }
+
+        if (
+          !data?.conversationId ||
+          typeof data.conversationId !== 'string' ||
+          !mongoose.Types.ObjectId.isValid(data.conversationId)
+        ) {
+          if (callback) callback({ success: false, error: 'Invalid conversation ID' });
+          return;
+        }
+
         const conversation = await Conversation.findById(data.conversationId);
         if (!conversation || !conversation.hasParticipant(userId)) {
           if (callback) callback({ success: false, error: 'Unauthorized conversation room' });
@@ -105,13 +189,15 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
 
     // Leave conversation room
     socket.on('conversation:leave', (data: { conversationId: string }) => {
+      if (!data?.conversationId || typeof data.conversationId !== 'string') return;
       socket.leave(`conversation:${data.conversationId}`);
       logger.debug(`Socket ${socket.id} left conversation:${data.conversationId}`);
     });
 
     // Typing Indicators (Ephemeral - no database writes)
     socket.on('typing:start', (data: { conversationId: string }) => {
-      if (!data?.conversationId) return;
+      if (!checkSocketRateLimit(socket.id)) return;
+      if (!data?.conversationId || typeof data.conversationId !== 'string') return;
       if (!socket.rooms.has(`conversation:${data.conversationId}`)) return;
 
       const key = `${data.conversationId}_${userId}`;
@@ -144,7 +230,10 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     });
 
     socket.on('typing:stop', (data: { conversationId: string }) => {
-      if (!data?.conversationId) return;
+      if (!checkSocketRateLimit(socket.id)) return;
+      if (!data?.conversationId || typeof data.conversationId !== 'string') return;
+      if (!socket.rooms.has(`conversation:${data.conversationId}`)) return;
+
       const key = `${data.conversationId}_${userId}`;
       if (typingTimeouts.has(key)) {
         clearTimeout(typingTimeouts.get(key)!);
@@ -162,8 +251,20 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     // Send real-time message
     socket.on('message:send', async (payload: unknown, callback) => {
       try {
+        if (!checkSocketRateLimit(socket.id)) {
+          if (typeof callback === 'function') {
+            callback({ success: false, error: 'Rate limit exceeded', code: 'RATE_LIMIT_EXCEEDED' });
+          }
+          return;
+        }
+
         const validated = sendMessageSchema.parse(payload);
         const result = await MessageService.sendMessage(userId, validated);
+
+        // Auto-join conversation room if socket is not in it yet
+        if (!socket.rooms.has(`conversation:${validated.conversationId}`)) {
+          socket.join(`conversation:${validated.conversationId}`);
+        }
 
         // Broadcast to conversation room
         io.to(`conversation:${validated.conversationId}`).emit('message:new', result.message);
@@ -172,6 +273,9 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
         result.recipientIds.forEach((recipientId) => {
           io.to(`user:${recipientId}`).emit('message:new', result.message);
         });
+
+        // Multi-device sync: Broadcast to sender's other devices/tabs
+        io.to(`user:${userId}`).emit('message:new', result.message);
 
         if (typeof callback === 'function') {
           callback({ success: true, message: result.message, isDuplicate: result.isDuplicate });
@@ -191,6 +295,8 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     // Message delivered acknowledgment
     socket.on('message:delivered', async (data: { messageId: string; conversationId: string }) => {
       try {
+        if (!checkSocketRateLimit(socket.id)) return;
+        if (!data?.conversationId || !socket.rooms.has(`conversation:${data.conversationId}`)) return;
         if (data.messageId) {
           await MessageService.markDelivered(data.messageId, userId);
           io.to(`conversation:${data.conversationId}`).emit('message:status', {
@@ -208,6 +314,8 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     // Message read acknowledgment
     socket.on('message:read', async (data: { messageId: string; conversationId: string }) => {
       try {
+        if (!checkSocketRateLimit(socket.id)) return;
+        if (!data?.conversationId || !socket.rooms.has(`conversation:${data.conversationId}`)) return;
         if (data.messageId) {
           await MessageService.markRead(data.messageId, userId);
           // Mark notification as read
@@ -235,9 +343,9 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
     // Entire conversation read acknowledgment
     socket.on('conversation:read', async (data: { conversationId: string }) => {
       try {
-        if (data?.conversationId) {
-          await ConversationService.markConversationRead(data.conversationId, userId);
-        }
+        if (!checkSocketRateLimit(socket.id)) return;
+        if (!data?.conversationId || !socket.rooms.has(`conversation:${data.conversationId}`)) return;
+        await ConversationService.markConversationRead(data.conversationId, userId);
       } catch (err) {
         logger.debug('Error in conversation:read handler:', err);
       }
@@ -248,6 +356,14 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       'message:edit',
       async (data: { messageId: string; conversationId: string; content: string }, callback) => {
         try {
+          if (!checkSocketRateLimit(socket.id)) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Rate limit exceeded' });
+            return;
+          }
+          if (!data?.conversationId || !socket.rooms.has(`conversation:${data.conversationId}`)) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized room' });
+            return;
+          }
           const updated = await MessageService.editMessage(data.messageId, userId, data.content);
           io.to(`conversation:${data.conversationId}`).emit('message:edited', updated);
           if (typeof callback === 'function') callback({ success: true, message: updated });
@@ -262,6 +378,14 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       'message:delete',
       async (data: { messageId: string; conversationId: string }, callback) => {
         try {
+          if (!checkSocketRateLimit(socket.id)) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Rate limit exceeded' });
+            return;
+          }
+          if (!data?.conversationId || !socket.rooms.has(`conversation:${data.conversationId}`)) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized room' });
+            return;
+          }
           const result = await MessageService.deleteMessage(data.messageId, userId);
           io.to(`conversation:${data.conversationId}`).emit('message:deleted', result);
           if (typeof callback === 'function') callback({ success: true, ...result });
@@ -279,6 +403,14 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
         callback
       ) => {
         try {
+          if (!checkSocketRateLimit(socket.id)) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Rate limit exceeded' });
+            return;
+          }
+          if (!data?.conversationId || !socket.rooms.has(`conversation:${data.conversationId}`)) {
+            if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized room' });
+            return;
+          }
           const result =
             data.action === 'remove'
               ? await MessageService.removeReaction(data.messageId, userId)
@@ -318,8 +450,14 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
             return;
           }
 
-          // Check if recipient is online
-          const isOnline = Boolean(activeUserSockets.get(data.recipientId)?.size);
+          // Check if recipient is online (local or cluster-wide)
+          let isOnline = Boolean(activeUserSockets.get(data.recipientId)?.size);
+          if (!isOnline && typeof (io.in as any) === 'function') {
+            try {
+              const sockets = await io.in(`user:${data.recipientId}`).fetchSockets();
+              isOnline = sockets.length > 0;
+            } catch {}
+          }
           if (!isOnline) {
             if (typeof callback === 'function') callback({ success: false, reason: 'offline' });
             return;
@@ -372,6 +510,7 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
           const session: ActiveCallSession = {
             callId,
             callerId: userId,
+            callerSocketId: socket.id,
             recipientId: data.recipientId,
             conversationId: data.conversationId,
             callType: data.callType,
@@ -440,11 +579,16 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
             callTimeouts.delete(session.callId);
           }
           session.status = 'connected';
+          session.recipientSocketId = socket.id;
           io.to(`user:${session.callerId}`).emit('call:accepted', {
             callId: session.callId,
             recipientId: userId,
             conversationId: data.conversationId,
             callType: data.callType,
+          });
+          // Multi-device sync: Notify recipient's other devices that call was answered
+          socket.to(`user:${userId}`).emit('call:answered-elsewhere', {
+            callId: session.callId,
           });
         } else {
           logger.warn(`Unauthorized call:answer attempt by user ${userId}`);
@@ -471,6 +615,10 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
           callId: session.callId,
           recipientId: userId,
           reason: data?.reason || 'declined',
+        });
+        // Multi-device sync: Notify recipient's other devices that call was declined
+        socket.to(`user:${userId}`).emit('call:rejected-elsewhere', {
+          callId: session.callId,
         });
       } else if (data?.callerId) {
         // Fallback cleanup if session was already removed
@@ -600,12 +748,18 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
       // Active call cleanup: Notify peer if disconnected abruptly
       const activeCallId = userCallMap.get(userId);
       if (activeCallId) {
-        if (callTimeouts.has(activeCallId)) {
-          clearTimeout(callTimeouts.get(activeCallId)!);
-          callTimeouts.delete(activeCallId);
-        }
         const session = activeCalls.get(activeCallId);
-        if (session) {
+        const userSockets = activeUserSockets.get(userId);
+        const isCallSocket =
+          session &&
+          (session.callerSocketId === socket.id || session.recipientSocketId === socket.id);
+        const isLastSocket = !userSockets || userSockets.size <= 1;
+
+        if (session && (isCallSocket || isLastSocket)) {
+          if (callTimeouts.has(activeCallId)) {
+            clearTimeout(callTimeouts.get(activeCallId)!);
+            callTimeouts.delete(activeCallId);
+          }
           const peerId = session.callerId === userId ? session.recipientId : session.callerId;
           activeCalls.delete(activeCallId);
           userCallMap.delete(session.callerId);
@@ -620,15 +774,22 @@ export const setupSocketGateway = (io: SocketIOServer): void => {
         }
       }
 
+      // Cleanup rate limit tracking for socket
+      socketEventTimestamps.delete(socket.id);
+
       const userSockets = activeUserSockets.get(userId);
       if (userSockets) {
         userSockets.delete(socket.id);
         if (userSockets.size === 0) {
           activeUserSockets.delete(userId);
+          const lastSeenDate = new Date();
+          User.findByIdAndUpdate(userId, { lastSeen: lastSeenDate }).catch((err) => {
+            logger.warn(`Failed to update lastSeen on disconnect for user ${userId}:`, err);
+          });
           // Broadcast offline presence only when all sockets for this user are disconnected
           io.emit('presence:offline', {
             userId,
-            lastSeen: new Date().toISOString(),
+            lastSeen: lastSeenDate.toISOString(),
           });
         }
       }

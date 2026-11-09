@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
@@ -63,20 +63,23 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   }, []);
 
   // Handle credential response from Google
-  const handleCredentialResponse = async (credential: string) => {
-    setIsSubmitting(true);
-    try {
-      await googleLogin(credential);
-      router.push('/chat');
-    } catch (err: any) {
-      const msg = err.message || 'Google authentication failed';
-      if (onError) {
-        onError(msg);
+  const handleCredentialResponse = useCallback(
+    async (credential: string) => {
+      setIsSubmitting(true);
+      try {
+        await googleLogin(credential);
+        router.push('/chat');
+      } catch (err: any) {
+        const msg = err.message || 'Google authentication failed';
+        if (onError) {
+          onError(msg);
+        }
+      } finally {
+        setIsSubmitting(false);
       }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    },
+    [googleLogin, router, onError]
+  );
 
   // Initialize Google One Tap in background without rendering heavy iframes
   useEffect(() => {
@@ -95,7 +98,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         console.warn('Error initializing Google Auth:', err);
       }
     }
-  }, [isSdkLoaded, clientId]);
+  }, [isSdkLoaded, clientId, handleCredentialResponse]);
 
   // Handle click on Google sign-in button
   const handleGoogleClick = async () => {

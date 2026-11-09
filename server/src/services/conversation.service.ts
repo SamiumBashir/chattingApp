@@ -422,6 +422,12 @@ export class ConversationService {
           userId: currentUserId,
         });
 
+        // Multi-device sync: Emit to user's personal room so other devices update unread counts
+        gateway.to(`user:${currentUserId}`).emit('conversation:read', {
+          conversationId,
+          userId: currentUserId,
+        });
+
         const unreadCount = await Notification.countDocuments({
           recipient: userObjId,
           isRead: false,

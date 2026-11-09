@@ -67,6 +67,20 @@ export const authService = {
       await apiClient.post('/auth/logout', {});
     } finally {
       setAccessToken(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('connectly_user');
+      }
+    }
+  },
+
+  async logoutAll(): Promise<void> {
+    try {
+      await apiClient.post('/auth/logout-all', {});
+    } finally {
+      setAccessToken(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('connectly_user');
+      }
     }
   },
 

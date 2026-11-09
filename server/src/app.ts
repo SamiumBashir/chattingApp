@@ -102,7 +102,14 @@ export const createApp = (): Application => {
 
   // 404 Handler
   app.use((req: Request, res: Response) => {
-    sendError(res, 404, 'NOT_FOUND', `Route ${req.method} ${req.originalUrl} not found`);
+    sendError(
+      res,
+      404,
+      'NOT_FOUND',
+      `Route ${req.method} ${req.originalUrl} not found`,
+      undefined,
+      (req as any).id
+    );
   });
 
   // Centralized Error Handling Middleware

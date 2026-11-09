@@ -6,24 +6,37 @@ import { env } from '../config/env.js';
 
 export const errorHandler = (
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
+  const requestId = (req as any)?.id || (res.getHeader('x-request-id') as string);
+
   // Handle Zod Validation Error
   if (err instanceof ZodError) {
     const details = err.issues.map((issue) => ({
       path: issue.path.join('.'),
       message: issue.message,
     }));
-    sendError(res, 400, 'VALIDATION_ERROR', 'Request validation failed', details);
+    sendError(res, 400, 'VALIDATION_ERROR', 'Request validation failed', details, requestId);
     return;
   }
 
   // Handle Known Operational AppError
   if (err instanceof AppError || (err && typeof err === 'object' && (err as { isOperational?: boolean }).isOperational)) {
     const appErr = err as AppError;
-    sendError(res, appErr.statusCode || 500, appErr.code || 'APP_ERROR', appErr.message, appErr.details);
+    sendError(res, appErr.statusCode || 500, appErr.code || 'APP_ERROR', appErr.message, appErr.details, requestId);
+    return;
+  }
+
+  // Handle Multer upload errors
+  if (typeof err === 'object' && err !== null && (err as { name?: string }).name === 'MulterError') {
+    const multerErr = err as { code?: string; message?: string };
+    if (multerErr.code === 'LIMIT_FILE_SIZE') {
+      sendError(res, 400, 'FILE_TOO_LARGE', 'Uploaded file exceeds the 25MB maximum limit', undefined, requestId);
+      return;
+    }
+    sendError(res, 400, 'UPLOAD_ERROR', multerErr.message || 'File upload failed', undefined, requestId);
     return;
   }
 
@@ -36,14 +49,15 @@ export const errorHandler = (
       409,
       'DUPLICATE_RESOURCE',
       `A record with this ${field} already exists.`,
-      keyVal
+      keyVal,
+      requestId
     );
     return;
   }
 
   // Handle Mongoose CastError (e.g. invalid ObjectId)
   if (typeof err === 'object' && err !== null && 'name' in err && (err as { name: unknown }).name === 'CastError') {
-    sendError(res, 400, 'INVALID_IDENTIFIER', 'Invalid ID format provided');
+    sendError(res, 400, 'INVALID_IDENTIFIER', 'Invalid ID format provided', undefined, requestId);
     return;
   }
 
@@ -59,7 +73,9 @@ export const errorHandler = (
       res,
       503,
       'DATABASE_UNAVAILABLE',
-      'Database connection unavailable. MongoDB is not running or unreachable at the configured MONGODB_URI. Please start your MongoDB service/Docker container or configure MongoDB Atlas in server/.env.'
+      'Database connection unavailable. MongoDB is not running or unreachable at the configured MONGODB_URI. Please start your MongoDB service/Docker container or configure MongoDB Atlas in server/.env.',
+      undefined,
+      requestId
     );
     return;
   }
@@ -72,7 +88,8 @@ export const errorHandler = (
     500,
     'INTERNAL_SERVER_ERROR',
     message,
-    env.NODE_ENV !== 'production' ? (err as Error).stack : undefined
+    env.NODE_ENV !== 'production' ? (err as Error).stack : undefined,
+    requestId
   );
 };
 

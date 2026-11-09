@@ -7,6 +7,7 @@ import {
   generateRefreshToken,
   generateRandomToken,
   hashToken,
+  getRefreshExpirationMs,
 } from '../utils/token.js';
 import {
   RegisterInput,
@@ -17,6 +18,7 @@ import {
 import { EmailService } from './email.service.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { disconnectUserSockets, disconnectSessionSockets } from '../sockets/socketGateway.js';
 
 const googleOAuthClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
@@ -132,13 +134,14 @@ export class AuthService {
       logger.warn(`Failed to dispatch verification email on register: ${err.message}`);
     });
 
-    // Create session & refresh token (expires in 30 days)
+    // Create session & refresh token (expires synchronized with env config)
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + getRefreshExpirationMs());
 
     const session = await Session.create({
       user: user._id,
       refreshTokenHash,
+      previousTokenHashes: [],
       deviceName: meta.userAgent.slice(0, 50) || 'Web Browser',
       userAgent: meta.userAgent,
       ipAddress: meta.ipAddress,
@@ -199,11 +202,12 @@ export class AuthService {
 
     // Create new session & refresh token
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + getRefreshExpirationMs());
 
     const session = await Session.create({
       user: user._id,
       refreshTokenHash,
+      previousTokenHashes: [],
       deviceName: meta.userAgent.slice(0, 50) || 'Web Browser',
       userAgent: meta.userAgent,
       ipAddress: meta.ipAddress,
@@ -299,11 +303,12 @@ export class AuthService {
 
     // Create session & refresh token
     const { token: refreshToken, hash: refreshTokenHash } = generateRefreshToken();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + getRefreshExpirationMs());
 
     const session = await Session.create({
       user: user._id,
       refreshTokenHash,
+      previousTokenHashes: [],
       deviceName: meta.userAgent.slice(0, 50) || 'Web Browser (Google)',
       userAgent: meta.userAgent,
       ipAddress: meta.ipAddress,
@@ -328,7 +333,7 @@ export class AuthService {
   }
 
   /**
-   * Rotate refresh token and issue new access token
+   * Rotate refresh token and issue new access token with Token-Family Reuse Detection
    */
   static async refresh(rawRefreshToken: string, meta: DeviceMetadata) {
     if (!rawRefreshToken) {
@@ -336,34 +341,65 @@ export class AuthService {
     }
 
     const hashed = hashToken(rawRefreshToken);
+
+    // 1. Check if hashed token matches an active session's current token
     const session = await Session.findOne({ refreshTokenHash: hashed });
 
+    // 2. If not found by active token, check if it matches an already rotated token (REUSE / REPLAY ATTACK!)
     if (!session) {
+      const compromisedSession = await Session.findOne({ previousTokenHashes: hashed });
+      if (compromisedSession) {
+        logger.warn(
+          `SECURITY ALERT: Refresh token replay / reuse detected for user ${compromisedSession.user} (Session: ${compromisedSession.id})! Revoking all sessions.`
+        );
+        // Revoke all sessions for this compromised user immediately and disconnect live sockets
+        await Session.updateMany({ user: compromisedSession.user }, { $set: { revokedAt: new Date() } });
+        disconnectUserSockets(compromisedSession.user.toString(), 'SESSION_COMPROMISED');
+        throw new AppError(
+          'Compromised session detected. Token reuse detected. Please log in again.',
+          401,
+          'SESSION_COMPROMISED'
+        );
+      }
+
       throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
     }
 
-    // Refresh token reuse detection: If session was already revoked, revoke all sessions for this user!
+    // 3. If session is already revoked, revoke all sessions for this user and disconnect live sockets
     if (session.revokedAt) {
-      logger.warn(`Refresh token reuse detected for session ${session.id}! Revoking all sessions.`);
-      await Session.updateMany({ user: session.user }, { revokedAt: new Date() });
+      logger.warn(`Attempt to use revoked session ${session.id}! Revoking all user sessions.`);
+      await Session.updateMany({ user: session.user }, { $set: { revokedAt: new Date() } });
+      disconnectUserSockets(session.user.toString(), 'SESSION_COMPROMISED');
       throw new AppError('Compromised session detected. Please log in again.', 401, 'SESSION_COMPROMISED');
     }
 
+    // 4. Check if session has expired
     if (new Date() > session.expiresAt) {
       throw new AppError('Refresh token expired. Please log in again.', 401, 'SESSION_EXPIRED');
     }
 
+    // 5. Check user status
     const user = await User.findById(session.user);
     if (!user || user.status === 'banned' || user.status === 'suspended') {
       throw new AppError('Account inactive or revoked', 403, 'ACCOUNT_INACTIVE');
     }
 
-    // Rotate refresh token
+    // 6. Rotate refresh token and record previous token in history for replay detection
     const { token: newRefreshToken, hash: newHash } = generateRefreshToken();
+    const newExpiresAt = new Date(Date.now() + getRefreshExpirationMs());
+
+    if (!session.previousTokenHashes) {
+      session.previousTokenHashes = [];
+    }
+    session.previousTokenHashes.push(hashed);
+    // Keep last 25 tokens in history to bound document size
+    if (session.previousTokenHashes.length > 25) {
+      session.previousTokenHashes = session.previousTokenHashes.slice(-25);
+    }
     session.refreshTokenHash = newHash;
-    session.userAgent = meta.userAgent || session.userAgent;
-    session.ipAddress = meta.ipAddress || session.ipAddress;
-    session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    session.expiresAt = newExpiresAt;
+    if (meta.userAgent) session.userAgent = meta.userAgent;
+    if (meta.ipAddress) session.ipAddress = meta.ipAddress;
     await session.save();
 
     const accessToken = generateAccessToken({
@@ -387,6 +423,7 @@ export class AuthService {
   static async logout(sessionId: string) {
     if (sessionId) {
       await Session.findByIdAndUpdate(sessionId, { revokedAt: new Date() });
+      disconnectSessionSockets(sessionId, 'LOGGED_OUT');
     }
   }
 
@@ -396,7 +433,27 @@ export class AuthService {
   static async logoutByRefreshToken(rawRefreshToken: string) {
     if (rawRefreshToken) {
       const hashed = hashToken(rawRefreshToken);
-      await Session.findOneAndUpdate({ refreshTokenHash: hashed }, { revokedAt: new Date() });
+      const session = await Session.findOneAndUpdate(
+        { $or: [{ refreshTokenHash: hashed }, { previousTokenHashes: hashed }] },
+        { revokedAt: new Date() }
+      );
+      if (session) {
+        disconnectSessionSockets(session.id, 'LOGGED_OUT');
+      }
+    }
+  }
+
+  /**
+   * Revoke ALL active sessions for a user (Logout from all devices)
+   */
+  static async logoutAll(userId: string) {
+    if (userId) {
+      await Session.updateMany(
+        { user: userId, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+      disconnectUserSockets(userId, 'LOGGED_OUT');
+      logger.info(`Revoked all sessions for user ${userId}`);
     }
   }
 
@@ -473,8 +530,9 @@ export class AuthService {
     user.passwordResetExpires = undefined;
     await user.save();
 
-    // Security rule: Revoke all active sessions upon password reset
-    await Session.updateMany({ user: user._id }, { revokedAt: new Date() });
+    // Security rule: Revoke all active sessions upon password reset and disconnect live sockets
+    await Session.updateMany({ user: user._id }, { $set: { revokedAt: new Date() } });
+    disconnectUserSockets(user.id, 'PASSWORD_RESET');
 
     return { reset: true };
   }
@@ -510,6 +568,7 @@ export class AuthService {
 
     session.revokedAt = new Date();
     await session.save();
+    disconnectSessionSockets(sessionId, 'SESSION_REVOKED');
     return { revoked: true };
   }
 }

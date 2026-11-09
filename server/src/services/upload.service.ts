@@ -2,6 +2,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/apiResponse.js';
 import { logger } from '../utils/logger.js';
+import { validateUploadedFile, sanitizeFileName } from '../utils/fileValidation.js';
 
 // Configure Cloudinary SDK
 if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
@@ -29,13 +30,17 @@ export interface UploadSignatureResponse {
   apiKey: string;
   cloudName: string;
   folder: string;
+  resourceType?: string;
 }
 
 export class UploadService {
   /**
    * Generate secure signed upload parameters for client-side direct upload
    */
-  static generateSignature(folder: string = 'connectly/attachments'): UploadSignatureResponse {
+  static generateSignature(
+    folder: string = 'connectly/attachments',
+    resourceType: string = 'auto'
+  ): UploadSignatureResponse {
     // Validate folder against strict whitelist
     if (!ALLOWED_UPLOAD_FOLDERS.includes(folder as AllowedUploadFolder)) {
       throw new AppError(
@@ -67,6 +72,7 @@ export class UploadService {
       apiKey: env.CLOUDINARY_API_KEY || 'mock_key',
       cloudName: env.CLOUDINARY_CLOUD_NAME || 'mock_cloud',
       folder,
+      resourceType,
     };
   }
 
@@ -74,8 +80,8 @@ export class UploadService {
    * Delete asset from Cloudinary by public ID
    */
   static async deleteAsset(publicId: string, resourceType: 'image' | 'raw' | 'video' = 'image') {
-    if (!publicId) {
-      throw new AppError('Public ID is required', 400);
+    if (!publicId || !/^[a-zA-Z0-9/_-]+$/.test(publicId)) {
+      throw new AppError('Invalid public ID format', 400, 'INVALID_PUBLIC_ID');
     }
 
     try {
@@ -105,6 +111,17 @@ export class UploadService {
       );
     }
 
+    // Validate file integrity, extension allowlist, and size bounds
+    const cleanFileName = sanitizeFileName(fileName);
+    const validation = validateUploadedFile(cleanFileName, mimeType, buffer.length);
+    if (!validation.valid) {
+      throw new AppError(
+        validation.error || 'Invalid file format',
+        400,
+        validation.code || 'UNSUPPORTED_FILE_TYPE'
+      );
+    }
+
     const resourceType = mimeType.startsWith('image/')
       ? 'image'
       : mimeType.startsWith('audio/') || mimeType.startsWith('video/')
@@ -123,7 +140,7 @@ export class UploadService {
         {
           folder,
           resource_type: resourceType,
-          filename_override: fileName,
+          filename_override: cleanFileName,
           use_filename: true,
         },
         (error, result) => {
@@ -144,12 +161,12 @@ export class UploadService {
             if (buffer.length <= 5 * 1024 * 1024) {
               const base64Data = buffer.toString('base64');
               const dataUrl = `data:${mimeType};base64,${base64Data}`;
-              const fallbackId = `fallback_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+              const fallbackId = `fallback_${Date.now()}_${cleanFileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
               return resolve({
                 url: dataUrl,
                 secureUrl: dataUrl,
                 publicId: fallbackId,
-                fileName,
+                fileName: cleanFileName,
                 fileType: mimeType,
                 fileSize: buffer.length,
               });
@@ -167,7 +184,7 @@ export class UploadService {
             url: result.secure_url || result.url,
             secureUrl: result.secure_url || result.url,
             publicId: result.public_id,
-            fileName,
+            fileName: cleanFileName,
             fileType: mimeType,
             fileSize: result.bytes,
           });

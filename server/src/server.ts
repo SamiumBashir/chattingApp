@@ -34,10 +34,21 @@ const startServer = async () => {
   });
 
   // Redis Adapter integration for horizontal scaling if configured
+  let pubClient: Redis | null = null;
+  let subClient: Redis | null = null;
+
   if (env.REDIS_URL) {
     try {
-      const pubClient = new Redis(env.REDIS_URL);
-      const subClient = pubClient.duplicate();
+      pubClient = new Redis(env.REDIS_URL);
+      subClient = pubClient.duplicate();
+
+      pubClient.on('error', (err) => {
+        logger.warn(`Redis pubClient error: ${err.message}`);
+      });
+      subClient.on('error', (err) => {
+        logger.warn(`Redis subClient error: ${err.message}`);
+      });
+
       io.adapter(createAdapter(pubClient, subClient));
       logger.info('Connected to Redis for Socket.IO multi-instance adapter');
     } catch (redisErr: any) {
@@ -75,6 +86,16 @@ const startServer = async () => {
       io.close(() => {
         logger.info('Socket.IO connections closed');
       });
+      if (pubClient) {
+        try {
+          pubClient.disconnect();
+        } catch {}
+      }
+      if (subClient) {
+        try {
+          subClient.disconnect();
+        } catch {}
+      }
       await disconnectDatabase();
       process.exit(0);
     });
@@ -88,6 +109,14 @@ const startServer = async () => {
 
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+  process.on('unhandledRejection', (reason: any) => {
+    logger.error('Unhandled Promise Rejection:', reason);
+  });
+
+  process.on('uncaughtException', (err: Error) => {
+    logger.error('Uncaught Exception:', err);
+  });
 
   return { server, io };
 };

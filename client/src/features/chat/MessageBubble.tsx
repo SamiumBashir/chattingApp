@@ -198,65 +198,68 @@ export function MessageBubble({ message, currentUserId, isGroup }: MessageBubble
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
             <div className="space-y-1.5 mb-1.5">
-              {message.attachments.map((att, idx) => (
-                <div key={att.publicId || idx}>
-                  {att.fileType.startsWith('image/') ? (
-                    <a
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block overflow-hidden rounded-lg border border-primary/20 hover:opacity-95 transition-opacity"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={att.url}
-                        alt={att.fileName || 'Image attachment'}
-                        className="max-h-60 w-auto rounded-lg object-cover"
-                      />
-                    </a>
-                  ) : att.fileType.startsWith('audio/') || att.fileName?.startsWith('voice-') ? (
-                    <div className="my-1.5 w-full min-w-[220px] sm:min-w-[260px] p-2.5 rounded-xl bg-background/60 border border-primary/20 text-foreground">
-                      <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold">
-                        <Mic className="h-3.5 w-3.5 text-primary" />
-                        <span>Voice Message</span>
-                        {att.fileSize && (
-                          <span className="text-[10px] text-muted-foreground font-normal ml-auto">
-                            {(att.fileSize / 1024).toFixed(0)} KB
-                          </span>
+              {message.attachments.map((att, idx) => {
+                const mediaUrl = att.secureUrl || att.url;
+                return (
+                  <div key={att.publicId || idx}>
+                    {att.fileType.startsWith('image/') ? (
+                      <a
+                        href={mediaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block overflow-hidden rounded-lg border border-primary/20 hover:opacity-95 transition-opacity"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={mediaUrl}
+                          alt={att.fileName || 'Image attachment'}
+                          className="max-h-60 w-auto rounded-lg object-cover"
+                        />
+                      </a>
+                    ) : att.fileType.startsWith('audio/') || att.fileName?.startsWith('voice-') ? (
+                      <div className="my-1.5 w-full min-w-[220px] sm:min-w-[260px] p-2.5 rounded-xl bg-background/60 border border-primary/20 text-foreground">
+                        <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-semibold">
+                          <Mic className="h-3.5 w-3.5 text-primary" />
+                          <span>Voice Message</span>
+                          {att.fileSize && (
+                            <span className="text-[10px] text-muted-foreground font-normal ml-auto">
+                              {(att.fileSize / 1024).toFixed(0)} KB
+                            </span>
+                          )}
+                        </div>
+                        <audio
+                          controls
+                          src={mediaUrl}
+                          className="w-full h-8 rounded-lg"
+                          preload="metadata"
+                        />
+                      </div>
+                    ) : (
+                      <a
+                        href={mediaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={att.fileName}
+                        className={cn(
+                          'flex items-center gap-2.5 rounded-lg p-2 text-xs border transition-colors',
+                          isSender
+                            ? 'border-primary-foreground/20 bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground'
+                            : 'border-border bg-card hover:bg-muted text-foreground'
                         )}
-                      </div>
-                      <audio
-                        controls
-                        src={att.url}
-                        className="w-full h-8 rounded-lg"
-                        preload="metadata"
-                      />
-                    </div>
-                  ) : (
-                    <a
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download={att.fileName}
-                      className={cn(
-                        'flex items-center gap-2.5 rounded-lg p-2 text-xs border transition-colors',
-                        isSender
-                          ? 'border-primary-foreground/20 bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground'
-                          : 'border-border bg-card hover:bg-muted text-foreground'
-                      )}
-                    >
-                      <FileText className="h-4 w-4 shrink-0 text-primary" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold truncate text-[11px]">{att.fileName}</p>
-                        <p className="text-[10px] opacity-75">
-                          {att.fileSize ? `${(att.fileSize / 1024).toFixed(1)} KB` : 'File'}
-                        </p>
-                      </div>
-                      <Download className="h-3.5 w-3.5 opacity-70 shrink-0" />
-                    </a>
-                  )}
-                </div>
-              ))}
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-primary" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold truncate text-[11px]">{att.fileName}</p>
+                          <p className="text-[10px] opacity-75">
+                            {att.fileSize ? `${(att.fileSize / 1024).toFixed(1)} KB` : 'File'}
+                          </p>
+                        </div>
+                        <Download className="h-3.5 w-3.5 opacity-70 shrink-0" />
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

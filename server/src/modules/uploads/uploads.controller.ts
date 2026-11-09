@@ -4,6 +4,7 @@ import { sendSuccess, AppError } from '../../utils/apiResponse.js';
 import { AuthenticatedRequest } from '../../types/index.js';
 import { User } from '../../models/User.js';
 import { Message } from '../../models/Message.js';
+import { sanitizeFileName, escapeRegex } from '../../utils/fileValidation.js';
 
 export class UploadController {
   /**
@@ -12,7 +13,8 @@ export class UploadController {
   static async getSignature(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const folder = (req.body.folder as string) || 'connectly/attachments';
-      const signatureData = UploadService.generateSignature(folder);
+      const resourceType = (req.body.resourceType as string) || 'auto';
+      const signatureData = UploadService.generateSignature(folder, resourceType);
 
       sendSuccess(res, signatureData, 200);
     } catch (error) {
@@ -25,17 +27,23 @@ export class UploadController {
    */
   static async completeUpload(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { url, publicId, fileName, fileType, fileSize } = req.body;
+      const { url, secureUrl, publicId, fileName, fileType, fileSize } = req.body;
+      const cleanFileName = sanitizeFileName(fileName);
 
-      sendSuccess(res, {
-        attachment: {
-          url,
-          publicId,
-          fileName,
-          fileType,
-          fileSize,
+      sendSuccess(
+        res,
+        {
+          attachment: {
+            url,
+            secureUrl: secureUrl || url,
+            publicId,
+            fileName: cleanFileName,
+            fileType,
+            fileSize,
+          },
         },
-      }, 200);
+        200
+      );
     } catch (error) {
       next(error);
     }
@@ -51,16 +59,21 @@ export class UploadController {
       }
 
       const folder = (req.body.folder as string) || 'connectly/attachments';
+      const cleanFileName = sanitizeFileName(req.file.originalname);
       const result = await UploadService.uploadBuffer(
         req.file.buffer,
-        req.file.originalname,
+        cleanFileName,
         req.file.mimetype,
         folder
       );
 
-      sendSuccess(res, {
-        attachment: result,
-      }, 201);
+      sendSuccess(
+        res,
+        {
+          attachment: result,
+        },
+        201
+      );
     } catch (error) {
       next(error);
     }
@@ -75,8 +88,8 @@ export class UploadController {
       const publicId = Array.isArray(publicIdParam) ? publicIdParam[0] : publicIdParam;
       const resourceType = (req.query.resourceType as 'image' | 'raw' | 'video') || 'image';
 
-      if (!publicId) {
-        throw new AppError('Public ID is required', 400);
+      if (!publicId || !/^[a-zA-Z0-9/_-]+$/.test(publicId)) {
+        throw new AppError('Invalid public ID format', 400, 'INVALID_PUBLIC_ID');
       }
 
       const userId = req.user?.userId;
@@ -86,7 +99,7 @@ export class UploadController {
       if (!isAdmin) {
         // Verify ownership: was it used as their avatar or in a message sent by this user?
         const [isAvatar, messageWithAsset] = await Promise.all([
-          User.exists({ _id: userId, avatar: { $regex: publicId } }),
+          User.exists({ _id: userId, avatar: { $regex: escapeRegex(publicId) } }),
           Message.exists({ sender: userId, 'attachments.publicId': publicId }),
         ]);
 

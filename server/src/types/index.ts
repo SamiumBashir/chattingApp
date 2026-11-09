@@ -22,6 +22,7 @@ export interface ApiResponse<T = unknown> {
     code: string;
     message: string;
     details?: unknown;
+    requestId?: string;
   };
   meta?: {
     page?: number;

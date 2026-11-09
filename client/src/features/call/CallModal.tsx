@@ -38,12 +38,14 @@ export function CallModal() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
 
-  const hasRemoteVideo = Boolean(
-    remoteStream &&
-      remoteStream.getVideoTracks().length > 0 &&
-      remoteStream.getVideoTracks().some((t) => t.enabled)
-  );
+  // Dedicated helper to prime and unlock audio on user gesture
+  const primeAudio = () => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  };
 
   // Dedicated handler to manually unblock audio on user gesture
   const handleUnblockAudio = () => {
@@ -54,6 +56,37 @@ export function CallModal() {
         .catch(() => {});
     }
   };
+
+  // Track remote video track availability & state changes
+  useEffect(() => {
+    if (!remoteStream || callType !== 'video') {
+      setHasRemoteVideo(false);
+      return;
+    }
+
+    const checkTracks = () => {
+      const vTracks = remoteStream.getVideoTracks();
+      const active = vTracks.length > 0 && vTracks.some((t) => t.enabled && !t.muted);
+      setHasRemoteVideo(active);
+    };
+
+    checkTracks();
+
+    const videoTracks = remoteStream.getVideoTracks();
+    videoTracks.forEach((track) => {
+      track.addEventListener('unmute', checkTracks);
+      track.addEventListener('mute', checkTracks);
+      track.addEventListener('ended', checkTracks);
+    });
+
+    return () => {
+      videoTracks.forEach((track) => {
+        track.removeEventListener('unmute', checkTracks);
+        track.removeEventListener('mute', checkTracks);
+        track.removeEventListener('ended', checkTracks);
+      });
+    };
+  }, [remoteStream, callType]);
 
   // Attach remote stream to audio element (handles sound for both voice and video calls)
   useEffect(() => {
@@ -78,12 +111,20 @@ export function CallModal() {
   useEffect(() => {
     const videoEl = remoteVideoRef.current;
     if (videoEl && remoteStream && callType === 'video' && callState === 'connected') {
+      videoEl.muted = true;
       if (videoEl.srcObject !== remoteStream) {
         videoEl.srcObject = remoteStream;
       }
-      videoEl.play().catch((err) => {
-        console.warn('Remote video playback warning:', err);
-      });
+      videoEl
+        .play()
+        .then(() => {
+          if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+            setHasRemoteVideo(true);
+          }
+        })
+        .catch((err) => {
+          console.warn('Remote video playback warning:', err);
+        });
     }
   }, [remoteStream, callState, callType]);
 
@@ -91,6 +132,7 @@ export function CallModal() {
   useEffect(() => {
     const localEl = localVideoRef.current;
     if (localEl && localStream) {
+      localEl.muted = true;
       if (localEl.srcObject !== localStream) {
         localEl.srcObject = localStream;
       }
@@ -99,22 +141,37 @@ export function CallModal() {
   }, [localStream, callState, isVideoOff]);
 
   if (callState === 'idle') {
-    return null;
+    return (
+      <audio
+        ref={remoteAudioRef}
+        autoPlay
+        playsInline
+        className="hidden"
+        aria-hidden="true"
+        data-remote-call-audio="true"
+      />
+    );
   }
 
   return (
     <div
       onClick={() => {
+        primeAudio();
         if (isAudioBlocked) {
           handleUnblockAudio();
         }
       }}
       className="fixed inset-0 z-50 flex items-center justify-center select-none animate-in fade-in duration-200"
     >
-      {/* Remote audio playback for all connected calls (voice and video) */}
-      {callState === 'connected' && (
-        <audio ref={remoteAudioRef} autoPlay playsInline />
-      )}
+      {/* Remote audio playback element kept in DOM across entire call lifecycle */}
+      <audio
+        ref={remoteAudioRef}
+        autoPlay
+        playsInline
+        className="hidden"
+        aria-hidden="true"
+        data-remote-call-audio="true"
+      />
 
       {/* Floating browser autoplay unblock notification banner */}
       {callState === 'connected' && isAudioBlocked && (
@@ -187,7 +244,10 @@ export function CallModal() {
               <div className="flex flex-col items-center gap-2">
                 <button
                   type="button"
-                  onClick={acceptCall}
+                  onClick={() => {
+                    primeAudio();
+                    acceptCall();
+                  }}
                   className="relative flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg transition-transform active:scale-95 ring-4 ring-emerald-500/30"
                   title="Accept"
                 >
@@ -351,6 +411,8 @@ export function CallModal() {
               autoPlay
               playsInline
               muted
+              onLoadedMetadata={() => setHasRemoteVideo(true)}
+              onPlaying={() => setHasRemoteVideo(true)}
               className={cn(
                 'h-full w-full object-cover transition-opacity duration-300',
                 hasRemoteVideo ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'

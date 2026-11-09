@@ -23,6 +23,20 @@ if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD) {
 
 export class EmailService {
   /**
+   * Verify SMTP connection status
+   */
+  static async verifyConnection(): Promise<boolean> {
+    if (!transporter) return false;
+    try {
+      await transporter.verify();
+      return true;
+    } catch (err: any) {
+      logger.warn(`SMTP verification failed: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Send Email Verification Link
    */
   static async sendVerificationEmail(params: {

@@ -6,6 +6,7 @@ import { AuthenticatedRequest } from '../../types/index.js';
 import { env } from '../../config/env.js';
 import { User } from '../../models/User.js';
 import { AppError } from '../../utils/apiResponse.js';
+import { getRefreshExpirationMs } from '../../utils/token.js';
 
 // Cookie helper
 const setRefreshCookie = (res: Response, token: string) => {
@@ -14,7 +15,7 @@ const setRefreshCookie = (res: Response, token: string) => {
     secure: env.NODE_ENV === 'production',
     sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days persistent login
+    maxAge: getRefreshExpirationMs(),
   });
 };
 
@@ -96,10 +97,12 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
 
 export const refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const refreshToken =
-      req.cookies?.refreshToken ||
-      req.body?.refreshToken ||
-      (req.headers['x-refresh-token'] as string);
+    // Strictly cookie-only refresh token extraction (no body or custom header fallback)
+    const refreshToken = req.cookies?.refreshToken;
+    if (!refreshToken) {
+      throw new AppError('Refresh token cookie required', 401, 'REFRESH_TOKEN_REQUIRED');
+    }
+
     const meta = getDeviceMetadata(req);
     const result = await AuthService.refresh(refreshToken, meta);
     setRefreshCookie(res, result.refreshToken);
@@ -121,16 +124,26 @@ export const logout = async (req: AuthenticatedRequest, res: Response, next: Nex
     if (sessionId) {
       await AuthService.logout(sessionId);
     } else {
-      const refreshToken =
-        req.cookies?.refreshToken ||
-        req.body?.refreshToken ||
-        (req.headers['x-refresh-token'] as string);
+      const refreshToken = req.cookies?.refreshToken;
       if (refreshToken) {
         await AuthService.logoutByRefreshToken(refreshToken);
       }
     }
     clearRefreshCookie(res);
     sendSuccess(res, { message: 'Successfully logged out' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logoutAll = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+    }
+    await AuthService.logoutAll(req.user.userId);
+    clearRefreshCookie(res);
+    sendSuccess(res, { message: 'Successfully logged out from all devices' });
   } catch (error) {
     next(error);
   }

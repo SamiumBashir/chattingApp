@@ -12,16 +12,39 @@ import {
   unlockAudioMedia,
 } from '@/lib/callSounds';
 
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
+const getIceServers = (): RTCIceServer[] => {
+  const defaultServers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.services.mozilla.com' },
-  ],
-  iceCandidatePoolSize: 10,
+  ];
+
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.NEXT_PUBLIC_ICE_SERVERS) {
+      try {
+        const parsed = JSON.parse(process.env.NEXT_PUBLIC_ICE_SERVERS);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.warn('Invalid NEXT_PUBLIC_ICE_SERVERS JSON, using defaults:', e);
+      }
+    }
+
+    if (process.env.NEXT_PUBLIC_TURN_SERVER) {
+      const turnServer: RTCIceServer = {
+        urls: process.env.NEXT_PUBLIC_TURN_SERVER,
+        username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+        credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+      };
+      return [turnServer, ...defaultServers];
+    }
+  }
+
+  return defaultServers;
 };
 
 const acquireUserMedia = async (type: CallType): Promise<MediaStream> => {
@@ -43,10 +66,25 @@ const acquireUserMedia = async (type: CallType): Promise<MediaStream> => {
     });
   } catch (err) {
     console.warn('Advanced constraints rejected, falling back to basic constraints:', err);
-    return await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: type === 'video',
-    });
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: type === 'video',
+      });
+    } catch (fallbackErr: any) {
+      // If video requested but no camera found (e.g. desktop without webcam), fall back to audio
+      if (
+        type === 'video' &&
+        (fallbackErr?.name === 'NotFoundError' || fallbackErr?.name === 'DevicesNotFoundError')
+      ) {
+        console.warn('Camera hardware not found, falling back to audio-only stream');
+        return await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+      }
+      throw fallbackErr;
+    }
   }
 };
 
@@ -73,6 +111,7 @@ export function useWebRTC() {
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -100,6 +139,15 @@ export function useWebRTC() {
         } catch {}
       });
       localStreamRef.current = null;
+    }
+
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
+      remoteStreamRef.current = null;
     }
 
     if (peerConnectionRef.current) {
@@ -167,7 +215,10 @@ export function useWebRTC() {
         } catch {}
       }
 
-      const pc = new RTCPeerConnection(RTC_CONFIG);
+      const pc = new RTCPeerConnection({
+        iceServers: getIceServers(),
+        iceCandidatePoolSize: 10,
+      });
       peerConnectionRef.current = pc;
 
       // ICE candidates generated locally -> forward to target
@@ -183,34 +234,21 @@ export function useWebRTC() {
         }
       };
 
-      // Remote stream track arrived
+      // Remote stream track arrived - preserve stable MediaStream reference
       pc.ontrack = (event) => {
-        const track = event.track;
+        let stream = event.streams && event.streams[0] ? event.streams[0] : remoteStreamRef.current;
+        if (!stream) {
+          stream = new MediaStream();
+        }
+        if (!stream.getTracks().some((t) => t.id === event.track.id)) {
+          stream.addTrack(event.track);
+        }
+        remoteStreamRef.current = stream;
+        setRemoteStream(stream);
 
-        const updateRemoteStream = () => {
-          const incomingStream = event.streams && event.streams[0] ? event.streams[0] : null;
-          setRemoteStream((prevStream) => {
-            const existingTracks = prevStream ? prevStream.getTracks() : [];
-            const incomingTracks = incomingStream ? incomingStream.getTracks() : [track];
-            const trackMap = new Map<string, MediaStreamTrack>();
-            [...existingTracks, ...incomingTracks].forEach((t) => trackMap.set(t.id, t));
-            const newStream = new MediaStream(Array.from(trackMap.values()));
-            if (onRemoteStreamAttached) {
-              onRemoteStreamAttached(newStream);
-            }
-            return newStream;
-          });
-        };
-
-        updateRemoteStream();
-
-        track.onunmute = () => {
-          updateRemoteStream();
-        };
-
-        track.onended = () => {
-          updateRemoteStream();
-        };
+        if (onRemoteStreamAttached) {
+          onRemoteStreamAttached(stream);
+        }
       };
 
       pc.onconnectionstatechange = () => {
@@ -236,6 +274,12 @@ export function useWebRTC() {
       if (!user) return;
       cleanupMediaAndPeer();
       unlockAudioMedia();
+      try {
+        const audioEl = document.querySelector('audio[data-remote-call-audio="true"]') as HTMLAudioElement | null;
+        if (audioEl) {
+          audioEl.play().catch(() => {});
+        }
+      } catch {}
 
       const socket = getSocket();
       if (!socket || !socket.connected) {
@@ -520,7 +564,7 @@ export function useWebRTC() {
           for (const cand of pendingCandidatesRef.current) {
             try {
               if (cand && (cand.candidate || cand.sdpMid !== undefined)) {
-                await pc.addIceCandidate(cand);
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
               }
             } catch (e) {
               console.debug('Failed to add queued candidate:', e);
@@ -554,7 +598,7 @@ export function useWebRTC() {
           for (const cand of pendingCandidatesRef.current) {
             try {
               if (cand && (cand.candidate || cand.sdpMid !== undefined)) {
-                await pc.addIceCandidate(cand);
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
               }
             } catch (e) {
               console.debug('Failed to add queued candidate:', e);
@@ -576,7 +620,7 @@ export function useWebRTC() {
       if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try {
           if (data.candidate && (data.candidate.candidate || data.candidate.sdpMid !== undefined)) {
-            await pc.addIceCandidate(data.candidate);
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
           }
         } catch (e) {
           console.debug('Error adding incoming ICE candidate:', e);
@@ -613,6 +657,26 @@ export function useWebRTC() {
       handleEndCall(false);
     };
 
+    // H. Multi-device sync: Call was answered on user's other device/tab
+    const onCallAnsweredElsewhere = () => {
+      stopCallSounds();
+      if (ringingTimeoutRef.current) {
+        clearTimeout(ringingTimeoutRef.current);
+        ringingTimeoutRef.current = null;
+      }
+      resetCall();
+    };
+
+    // I. Multi-device sync: Call was declined on user's other device/tab
+    const onCallRejectedElsewhere = () => {
+      stopCallSounds();
+      if (ringingTimeoutRef.current) {
+        clearTimeout(ringingTimeoutRef.current);
+        ringingTimeoutRef.current = null;
+      }
+      resetCall();
+    };
+
     socket.on('call:incoming', onCallIncoming);
     socket.on('call:accepted', onCallAccepted);
     socket.on('webrtc:offer', onWebRTCOffer);
@@ -620,6 +684,8 @@ export function useWebRTC() {
     socket.on('webrtc:ice-candidate', onWebRTCIceCandidate);
     socket.on('call:rejected', onCallRejected);
     socket.on('call:ended', onCallEnded);
+    socket.on('call:answered-elsewhere', onCallAnsweredElsewhere);
+    socket.on('call:rejected-elsewhere', onCallRejectedElsewhere);
 
     return () => {
       socket.off('call:incoming', onCallIncoming);
@@ -629,6 +695,8 @@ export function useWebRTC() {
       socket.off('webrtc:ice-candidate', onWebRTCIceCandidate);
       socket.off('call:rejected', onCallRejected);
       socket.off('call:ended', onCallEnded);
+      socket.off('call:answered-elsewhere', onCallAnsweredElsewhere);
+      socket.off('call:rejected-elsewhere', onCallRejectedElsewhere);
     };
   }, [
     setIncomingCall,

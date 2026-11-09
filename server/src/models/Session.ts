@@ -3,6 +3,7 @@ import mongoose, { Document, Model, Schema } from 'mongoose';
 export interface ISession extends Document {
   user: mongoose.Types.ObjectId;
   refreshTokenHash: string;
+  previousTokenHashes: string[];
   deviceName: string;
   userAgent: string;
   ipAddress: string;
@@ -24,6 +25,11 @@ const sessionSchema = new Schema<ISession>(
     refreshTokenHash: {
       type: String,
       required: true,
+      index: true,
+    },
+    previousTokenHashes: {
+      type: [String],
+      default: [],
       index: true,
     },
     deviceName: {
@@ -57,6 +63,7 @@ const sessionSchema = new Schema<ISession>(
         delete ret._id;
         delete ret.__v;
         delete ret.refreshTokenHash;
+        delete ret.previousTokenHashes;
         return ret;
       },
     },

@@ -43,7 +43,8 @@ export const sendError = (
   statusCode = 500,
   code = 'INTERNAL_SERVER_ERROR',
   message = 'An unexpected error occurred',
-  details?: unknown
+  details?: unknown,
+  requestId?: string
 ): Response => {
   const response: ApiResponse = {
     success: false,
@@ -51,6 +52,7 @@ export const sendError = (
       code,
       message,
       ...(details ? { details } : {}),
+      ...(requestId ? { requestId } : {}),
     },
   };
   return res.status(statusCode).json(response);

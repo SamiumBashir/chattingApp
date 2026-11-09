@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../types/index.js';
 import { MessageService } from '../../services/message.service.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
+import { getSocketGateway } from '../../sockets/socketGateway.js';
 
 export const getConversationMessages = async (
   req: AuthenticatedRequest,
@@ -41,6 +42,15 @@ export const sendMessage = async (
       conversationId,
     });
 
+    const io = req.app?.get('io') || getSocketGateway();
+    if (io) {
+      io.to(`conversation:${conversationId}`).emit('message:new', result.message);
+      result.recipientIds?.forEach((recipientId) => {
+        io.to(`user:${recipientId}`).emit('message:new', result.message);
+      });
+      io.to(`user:${req.user!.userId}`).emit('message:new', result.message);
+    }
+
     sendSuccess(res, { message: result.message }, 201);
   } catch (error) {
     next(error);
@@ -69,6 +79,10 @@ export const editMessage = async (
   try {
     const messageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const updated = await MessageService.editMessage(messageId, req.user!.userId, req.body.content);
+    const io = req.app?.get('io') || getSocketGateway();
+    if (io && updated?.conversation) {
+      io.to(`conversation:${updated.conversation}`).emit('message:edited', updated);
+    }
     sendSuccess(res, { message: updated });
   } catch (error) {
     next(error);
@@ -83,6 +97,10 @@ export const deleteMessage = async (
   try {
     const messageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const result = await MessageService.deleteMessage(messageId, req.user!.userId);
+    const io = req.app?.get('io') || getSocketGateway();
+    if (io && result?.conversationId) {
+      io.to(`conversation:${result.conversationId}`).emit('message:deleted', result);
+    }
     sendSuccess(res, result);
   } catch (error) {
     next(error);
@@ -97,6 +115,10 @@ export const addReaction = async (
   try {
     const messageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const result = await MessageService.addReaction(messageId, req.user!.userId, req.body.emoji);
+    const io = req.app?.get('io') || getSocketGateway();
+    if (io && result?.conversationId) {
+      io.to(`conversation:${result.conversationId}`).emit('message:reaction-updated', result);
+    }
     sendSuccess(res, result);
   } catch (error) {
     next(error);
@@ -111,6 +133,10 @@ export const removeReaction = async (
   try {
     const messageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const result = await MessageService.removeReaction(messageId, req.user!.userId);
+    const io = req.app?.get('io') || getSocketGateway();
+    if (io && result?.conversationId) {
+      io.to(`conversation:${result.conversationId}`).emit('message:reaction-updated', result);
+    }
     sendSuccess(res, result);
   } catch (error) {
     next(error);
