@@ -18,6 +18,7 @@ import messagesRoutes from './modules/messages/messages.routes.js';
 import uploadsRoutes from './modules/uploads/uploads.routes.js';
 import notificationsRoutes from './modules/notifications/notifications.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
+import callsRoutes from './modules/calls/calls.routes.js';
 
 export const createApp = (): Application => {
   const app = express();
@@ -84,6 +85,7 @@ export const createApp = (): Application => {
   apiV1Router.use('/uploads', uploadsRoutes);
   apiV1Router.use('/notifications', notificationsRoutes);
   apiV1Router.use('/admin', adminRoutes);
+  apiV1Router.use('/calls', callsRoutes);
   apiV1Router.use('/', messagesRoutes);
 
   // Root Welcome & Status

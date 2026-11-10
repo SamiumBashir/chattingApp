@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { createApp } from './app.js';
 import { env, getAllowedOrigins } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
+import { disconnectRedis } from './config/redis.js';
 import { logger } from './utils/logger.js';
 import { setupSocketGateway } from './sockets/socketGateway.js';
 
@@ -96,6 +97,7 @@ const startServer = async () => {
           subClient.disconnect();
         } catch {}
       }
+      await disconnectRedis();
       await disconnectDatabase();
       process.exit(0);
     });

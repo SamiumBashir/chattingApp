@@ -11,6 +11,7 @@ import {
   leaveGroup,
   markConversationRead,
 } from './conversations.controller.js';
+import { getConversationCalls } from '../calls/calls.controller.js';
 import { authenticate } from '../../middlewares/auth.js';
 import { validateRequest } from '../../middlewares/validate.js';
 import {
@@ -28,6 +29,7 @@ router.get('/', listConversations);
 router.post('/private', validateRequest({ body: createPrivateConversationSchema }), createPrivateConversation);
 router.post('/group', validateRequest({ body: createGroupConversationSchema }), createGroupConversation);
 router.get('/:id', getConversation);
+router.get('/:id/calls', getConversationCalls);
 router.patch('/:id', validateRequest({ body: updateGroupSchema }), updateGroup);
 router.delete('/:id', deleteConversation);
 router.post('/:id/members', validateRequest({ body: addMembersSchema }), addMembers);

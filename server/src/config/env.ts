@@ -31,6 +31,15 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().default('Connectly <no-reply@connectly.app>'),
+
+  // WebRTC STUN & TURN Infrastructure
+  TURN_SERVER_URL: z.string().optional(),
+  TURNS_SERVER_URL: z.string().optional(),
+  TURN_SECRET: z.string().optional(),
+  TURN_USERNAME: z.string().optional(),
+  TURN_CREDENTIAL: z.string().optional(),
+  TURN_CREDENTIAL_TTL: z.coerce.number().default(86400),
+  STUN_SERVERS: z.string().optional(),
 });
 
 const parseEnv = () => {

@@ -13,6 +13,7 @@ import { MessageService } from '../services/message.service.js';
 import { ConversationService } from '../services/conversation.service.js';
 import { verifyGoogleIdToken } from '../services/auth.service.js';
 import { socketAuthMiddleware } from '../sockets/socketAuth.middleware.js';
+import { CallStateService } from '../services/callState.service.js';
 import {
   activeCalls,
   userCallMap,
@@ -21,6 +22,7 @@ import {
   disconnectUserSockets,
   disconnectSessionSockets,
   checkSocketRateLimit,
+  clearRateLimitTracking,
   setupSocketGateway,
 } from '../sockets/socketGateway.js';
 
@@ -454,12 +456,16 @@ describe('Security Hardening & Real-Time Integrity Tests', () => {
     let aliceEvents: Record<string, Function>;
     let bobSocket: any;
     let bobEvents: Record<string, Function>;
+    let eveSocket: any;
+    let eveEvents: Record<string, Function>;
 
     beforeEach(() => {
       activeCalls.clear();
       userCallMap.clear();
       callTimeouts.clear();
       activeUserSockets.clear();
+      clearRateLimitTracking();
+      CallStateService.resetMemoryState();
 
       ioEmitSpy = vi.fn();
       ioToSpy = vi.fn().mockReturnValue({ emit: ioEmitSpy });
@@ -520,8 +526,30 @@ describe('Security Hardening & Real-Time Integrity Tests', () => {
         }),
       };
 
+      eveEvents = {};
+      eveSocket = {
+        id: 'socket_eve_1',
+        data: {
+          user: {
+            userId: '507f1f77bcf86cd799439099',
+            sessionId: 'session_eve_1',
+            username: 'eve_attacker',
+            role: 'user',
+          },
+        },
+        rooms: new Set(['socket_eve_1', 'user:507f1f77bcf86cd799439099']),
+        join: vi.fn(),
+        leave: vi.fn(),
+        emit: vi.fn(),
+        to: vi.fn().mockReturnValue({ emit: vi.fn() }),
+        on: vi.fn((evt, handler) => {
+          eveEvents[evt] = handler;
+        }),
+      };
+
       connectionHandler(aliceSocket);
       connectionHandler(bobSocket);
+      connectionHandler(eveSocket);
 
       activeUserSockets.set(mockUser1.id, new Set([aliceSocket.id]));
       activeUserSockets.set(mockUser2.id, new Set([bobSocket.id]));
@@ -631,7 +659,7 @@ describe('Security Hardening & Real-Time Integrity Tests', () => {
       expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ success: false, reason: 'busy' }));
     });
 
-    it('answers call, transitions status to connected, and clears 15s ringing timeout', async () => {
+    it('answers call, transitions status to connecting then connected, and clears 15s ringing timeout', async () => {
       const callback = vi.fn();
       await aliceEvents['call:initiate'](
         { recipientId: mockUser2.id, conversationId: mockConversation.id, callType: 'audio' },
@@ -647,7 +675,8 @@ describe('Security Hardening & Real-Time Integrity Tests', () => {
       });
 
       const session = activeCalls.get(callId);
-      expect(session?.status).toBe('connected');
+      // Phase 1 requirement: call:answer transitions to connecting, not connected prematurely
+      expect(session?.status).toBe('connecting');
       expect(callTimeouts.has(callId)).toBe(false);
 
       expect(ioToSpy).toHaveBeenCalledWith(`user:${mockUser1.id}`);
@@ -660,6 +689,102 @@ describe('Security Hardening & Real-Time Integrity Tests', () => {
           callType: 'audio',
         })
       );
+
+      // WebRTC media connection verified -> transitions to connected
+      bobEvents['call:connected']({ callId });
+      expect(session?.status).toBe('connected');
+      expect(session?.connectedAt).toBeInstanceOf(Date);
+    });
+
+    it('prevents duplicate answer to the same call', async () => {
+      const callback = vi.fn();
+      await aliceEvents['call:initiate'](
+        { recipientId: mockUser2.id, conversationId: mockConversation.id, callType: 'audio' },
+        callback
+      );
+      const callId = callback.mock.calls[0][0].callId;
+
+      bobEvents['call:answer']({
+        callerId: mockUser1.id,
+        conversationId: mockConversation.id,
+        callType: 'audio',
+      });
+
+      const session = activeCalls.get(callId);
+      expect(session?.status).toBe('connecting');
+
+      ioEmitSpy.mockClear();
+
+      // Second answer attempt on same call
+      bobEvents['call:answer']({
+        callerId: mockUser1.id,
+        conversationId: mockConversation.id,
+        callType: 'audio',
+      });
+
+      // Does not re-emit call:accepted
+      expect(ioEmitSpy).not.toHaveBeenCalledWith('call:accepted', expect.anything());
+    });
+
+    it('rejects unauthorized call:answer from non-recipient third party', async () => {
+      const callback = vi.fn();
+      await aliceEvents['call:initiate'](
+        { recipientId: mockUser2.id, conversationId: mockConversation.id, callType: 'audio' },
+        callback
+      );
+      const callId = callback.mock.calls[0][0].callId;
+
+      // Eve attempts to answer Alice's call
+      eveEvents['call:answer']({
+        callerId: mockUser1.id,
+        conversationId: mockConversation.id,
+        callType: 'audio',
+      });
+
+      const session = activeCalls.get(callId);
+      expect(session?.status).toBe('ringing');
+      expect(ioEmitSpy).not.toHaveBeenCalledWith('call:accepted', expect.anything());
+    });
+
+    it('handles cancel before acceptance by caller (cancelling while ringing)', async () => {
+      const callback = vi.fn();
+      await aliceEvents['call:initiate'](
+        { recipientId: mockUser2.id, conversationId: mockConversation.id, callType: 'audio' },
+        callback
+      );
+      const callId = callback.mock.calls[0][0].callId;
+      expect(activeCalls.has(callId)).toBe(true);
+
+      // Caller cancels before recipient answers
+      aliceEvents['call:end']({ targetUserId: mockUser2.id, conversationId: mockConversation.id });
+
+      expect(activeCalls.has(callId)).toBe(false);
+      expect(userCallMap.has(mockUser1.id)).toBe(false);
+      expect(userCallMap.has(mockUser2.id)).toBe(false);
+      expect(ioToSpy).toHaveBeenCalledWith(`user:${mockUser2.id}`);
+      expect(ioEmitSpy).toHaveBeenCalledWith('call:ended', expect.objectContaining({ callId }));
+    });
+
+    it('handles Glare: resolves simultaneous reciprocal call:initiate deterministically', async () => {
+      const cb1 = vi.fn();
+      await aliceEvents['call:initiate'](
+        { recipientId: mockUser2.id, conversationId: mockConversation.id, callType: 'video' },
+        cb1
+      );
+      expect(cb1).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+      const callId1 = cb1.mock.calls[0][0].callId;
+
+      // Bob simultaneously calls Alice
+      const cb2 = vi.fn();
+      await bobEvents['call:initiate'](
+        { recipientId: mockUser1.id, conversationId: mockConversation.id, callType: 'video' },
+        cb2
+      );
+
+      // One deterministic session is preserved or routed without duplicate conflicts
+      expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+      expect(userCallMap.has(mockUser1.id)).toBe(true);
+      expect(userCallMap.has(mockUser2.id)).toBe(true);
     });
 
     it('auto-terminates call with 15s timeout if recipient does not answer', async () => {
@@ -898,6 +1023,8 @@ describe('Security Hardening & Real-Time Integrity Tests', () => {
       userCallMap.clear();
       callTimeouts.clear();
       activeUserSockets.clear();
+      clearRateLimitTracking();
+      CallStateService.resetMemoryState();
 
       ioEmitSpy = vi.fn();
       ioToSpy = vi.fn().mockReturnValue({ emit: ioEmitSpy });

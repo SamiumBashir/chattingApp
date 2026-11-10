@@ -3,6 +3,7 @@
 import React, { createContext, useContext } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { CallModal } from './CallModal';
+import { CallFeedbackModal } from './CallFeedbackModal';
 
 type CallContextValue = ReturnType<typeof useWebRTC>;
 
@@ -15,6 +16,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     <CallContext.Provider value={call}>
       {children}
       <CallModal />
+      <CallFeedbackModal />
     </CallContext.Provider>
   );
 }
