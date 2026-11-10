@@ -32,7 +32,7 @@ const envSchema = z.object({
   SMTP_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().default('Connectly <no-reply@connectly.app>'),
 
-  // WebRTC STUN & TURN Infrastructure
+  // WebRTC STUN & TURN Infrastructure (CoTURN & Metered)
   TURN_SERVER_URL: z.string().optional(),
   TURNS_SERVER_URL: z.string().optional(),
   TURN_SECRET: z.string().optional(),
@@ -40,6 +40,14 @@ const envSchema = z.object({
   TURN_CREDENTIAL: z.string().optional(),
   TURN_CREDENTIAL_TTL: z.coerce.number().default(86400),
   STUN_SERVERS: z.string().optional(),
+
+  // Metered.ca TURN Infrastructure
+  METERED_DOMAIN: z.string().optional(),
+  METERED_API_KEY: z.string().optional(),
+  METERED_ICE_SERVERS: z.string().optional(),
+  METERED_USERNAME: z.string().optional(),
+  METERED_CREDENTIAL: z.string().optional(),
+  METERED_API_CACHE_TTL: z.coerce.number().default(3600),
 });
 
 const parseEnv = () => {

@@ -56,14 +56,31 @@ export function extractRTCStats(
   let frameHeight: number | undefined;
   let fps: number | undefined;
 
+  let isRelay = false;
+  let localCandidateType: string | undefined;
+  let remoteCandidateType: string | undefined;
+  let candidatePairState: string | undefined;
+
   const now = Date.now();
 
+  const getStat = (id: string): any => {
+    if (typeof report.get === 'function') {
+      return report.get(id);
+    }
+    let found: any = null;
+    report.forEach((item: any) => {
+      if (item.id === id) found = item;
+    });
+    return found;
+  };
+
   report.forEach((stat: any) => {
-    // Active Candidate Pair for RTT and overall bytes
+    // Active Candidate Pair for RTT, overall bytes, and TURN relay verification
     if (
       stat.type === 'candidate-pair' &&
       (stat.state === 'succeeded' || stat.nominated === true || stat.selected === true)
     ) {
+      candidatePairState = stat.state;
       if (typeof stat.currentRoundTripTime === 'number') {
         rtt = Math.round(stat.currentRoundTripTime * 1000);
       } else if (typeof stat.roundTripTime === 'number') {
@@ -74,6 +91,23 @@ export function extractRTCStats(
       }
       if (typeof stat.bytesReceived === 'number') {
         bytesReceived = stat.bytesReceived;
+      }
+
+      if (stat.localCandidateId) {
+        const localCand = getStat(stat.localCandidateId);
+        if (localCand && localCand.candidateType) {
+          localCandidateType = localCand.candidateType;
+        }
+      }
+      if (stat.remoteCandidateId) {
+        const remoteCand = getStat(stat.remoteCandidateId);
+        if (remoteCand && remoteCand.candidateType) {
+          remoteCandidateType = remoteCand.candidateType;
+        }
+      }
+
+      if (localCandidateType === 'relay' || remoteCandidateType === 'relay') {
+        isRelay = true;
       }
     }
 
@@ -147,6 +181,12 @@ export function extractRTCStats(
     ...(frameWidth ? { frameWidth } : {}),
     ...(frameHeight ? { frameHeight } : {}),
     ...(fps !== undefined ? { fps } : {}),
+    isRelay,
+    ...(localCandidateType ? { localCandidateType } : {}),
+    ...(remoteCandidateType ? { remoteCandidateType } : {}),
+    ...(candidatePairState ? { candidatePairState } : {}),
+    totalBytesSent: bytesSent,
+    totalBytesReceived: bytesReceived,
   };
 
   const snapshot: RawStatsSnapshot = {

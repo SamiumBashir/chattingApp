@@ -209,6 +209,22 @@ export const NetworkQualityIndicator: React.FC<NetworkQualityIndicatorProps> = (
             </div>
           </div>
 
+          {/* Connection Route & Transport Badge (STUN P2P vs TURN Relay) */}
+          <div className="mb-3 px-2.5 py-1.5 rounded-xl bg-zinc-800/40 border border-zinc-800/70 flex items-center justify-between text-[11px]">
+            <span className="text-zinc-400">Route Type</span>
+            <span
+              className={cn(
+                'font-mono font-medium px-2 py-0.5 rounded text-[10px]',
+                qualityStats?.isRelay
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+              )}
+            >
+              {qualityStats?.isRelay ? 'TURN Relay' : 'P2P Direct'}
+              {qualityStats?.localCandidateType ? ` (${qualityStats.localCandidateType})` : ''}
+            </span>
+          </div>
+
           {/* Video Resolution Stats (if available) */}
           {qualityStats && (qualityStats.frameWidth || qualityStats.fps) && (
             <div className="mb-3 px-2.5 py-1.5 rounded-xl bg-zinc-800/30 border border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-300">

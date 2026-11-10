@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Mic, Volume2, Video, Check, Sparkles } from 'lucide-react';
+import { X, Mic, Volume2, Video, Check, Sparkles, Network } from 'lucide-react';
 import { useCallStore } from '@/store/callStore';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +34,7 @@ export function DeviceSettingsModal({
   onSelectAudioOutput,
   onSelectVideoInput,
 }: DeviceSettingsModalProps) {
-  const { isBackgroundBlurred, toggleBackgroundBlur } = useCallStore();
+  const { isBackgroundBlurred, toggleBackgroundBlur, iceTransportPolicy, setIceTransportPolicy } = useCallStore();
 
   if (!isOpen) return null;
 
@@ -198,6 +198,35 @@ export function DeviceSettingsModal({
               </div>
             </div>
           )}
+        </div>
+
+        {/* WebRTC TURN Relay NAT Traversal Testing Toggle */}
+        <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between">
+          <div className="flex flex-col pr-2">
+            <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Network className="h-3.5 w-3.5 text-primary" />
+              Force TURN Relay Testing Mode
+            </span>
+            <span className="text-[11px] text-muted-foreground mt-0.5">
+              Routes media through TURN relay servers only (<code className="text-[10px]">relay</code> policy)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIceTransportPolicy(iceTransportPolicy === 'relay' ? 'all' : 'relay')}
+            className={cn(
+              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+              iceTransportPolicy === 'relay' ? 'bg-amber-500' : 'bg-muted'
+            )}
+            title="Toggle TURN Relay Only mode (iceTransportPolicy: relay)"
+          >
+            <span
+              className={cn(
+                'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
+                iceTransportPolicy === 'relay' ? 'translate-x-5' : 'translate-x-0'
+              )}
+            />
+          </button>
         </div>
 
         {/* Footer */}

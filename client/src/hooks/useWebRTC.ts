@@ -321,6 +321,14 @@ export function useWebRTC() {
       setNetworkQuality(decision.quality, stats);
       setIsAudioOnlyDegraded(decision.isAudioOnlyDegraded);
 
+      if (process.env.NODE_ENV !== 'production' && stats.candidatePairState) {
+        console.debug(
+          `[WebRTC Telemetry] Route: ${stats.isRelay ? 'TURN Relay' : 'P2P Direct'}, ` +
+          `LocalType: ${stats.localCandidateType || 'n/a'}, RemoteType: ${stats.remoteCandidateType || 'n/a'}, ` +
+          `RTT: ${stats.rtt}ms, Loss: ${stats.packetLoss}%, In: ${stats.downlinkKbps}kbps, Out: ${stats.uplinkKbps}kbps`
+        );
+      }
+
       // Handle video fallback to audio-only if critical
       if (decision.shouldDegradeToAudioOnly) {
         console.warn('Network critically congested: degrading video to audio-only');
@@ -560,8 +568,10 @@ export function useWebRTC() {
       }
 
       const iceServers = customIceServers || callService.getCachedIceServers();
+      const iceTransportPolicy = useCallStore.getState().iceTransportPolicy;
       const pc = new RTCPeerConnection({
         iceServers,
+        iceTransportPolicy,
         iceCandidatePoolSize: 10,
       });
       peerConnectionRef.current = pc;
@@ -579,6 +589,11 @@ export function useWebRTC() {
 
         iceRestartAttemptsRef.current += 1;
         console.log(`Initiating WebRTC ICE restart (attempt ${iceRestartAttemptsRef.current}/3)...`);
+
+        // If credentials might have expired, invalidate cached ICE servers
+        if (iceRestartAttemptsRef.current >= 2) {
+          callService.clearIceServersCache();
+        }
 
         try {
           if (typeof peerConnectionRef.current.restartIce === 'function') {
@@ -607,17 +622,32 @@ export function useWebRTC() {
         }
       };
 
-      // Forward local ICE candidate to peer
+      // Forward local ICE candidate to peer with safe diagnostics logging
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          const cand = event.candidate;
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`[WebRTC ICE] Gathered candidate: type=${cand.type}, protocol=${cand.protocol}`);
+          }
           const socket = getSocket();
           if (socket && socket.connected) {
             socket.emit('webrtc:ice-candidate', {
               callId: useCallStore.getState().callId,
               targetUserId,
-              candidate: event.candidate.toJSON(),
+              candidate: cand.toJSON(),
             });
           }
+        }
+      };
+
+      // Safe ICE candidate error listener to detect TURN authorization failures
+      (pc as any).onicecandidateerror = (event: any) => {
+        console.warn(
+          `[WebRTC ICE Candidate Error] url=${event.url || 'unknown'}, code=${event.errorCode}, text=${event.errorText}`
+        );
+        if (event.errorCode === 401 || event.errorCode === 403) {
+          console.warn('[WebRTC ICE] TURN server authentication rejected (401/403). Clearing ICE server cache.');
+          callService.clearIceServersCache();
         }
       };
 

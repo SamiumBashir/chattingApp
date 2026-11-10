@@ -201,8 +201,8 @@ describe('Phase 10 — End-to-End Calling System Verification & Stress Scenarios
       expect(hasRelayB).toBe(true);
     });
 
-    it('generates secure short-lived TURN credentials on backend with validity window', () => {
-      const iceConfig = CallService.getIceServers(userAId);
+    it('generates secure short-lived TURN credentials on backend with validity window', async () => {
+      const iceConfig = await CallService.getIceServers(userAId);
       expect(iceConfig.iceServers.length).toBeGreaterThan(0);
       expect(iceConfig.expiresAt).toBeDefined();
 

@@ -37,6 +37,13 @@ export interface QualityStats {
   frameWidth?: number;
   frameHeight?: number;
   fps?: number;
+  // TURN Relay & Cross-Network Diagnostics
+  isRelay?: boolean;
+  localCandidateType?: string;
+  remoteCandidateType?: string;
+  candidatePairState?: string;
+  totalBytesSent?: number;
+  totalBytesReceived?: number;
 }
 
 export type PipPosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
@@ -70,6 +77,7 @@ interface CallStoreState {
   isBackgroundBlurred: boolean;
   isRatingModalOpen: boolean;
   lastEndedCallId: string | null;
+  iceTransportPolicy: 'all' | 'relay';
 
   // State Machine Actions
   setInitiating: (partner: CallPartner, conversationId: string, callType: CallType) => void;
@@ -113,6 +121,7 @@ interface CallStoreState {
   setIsBackgroundBlurred: (isBackgroundBlurred: boolean) => void;
   openRatingModal: (callId: string) => void;
   closeRatingModal: () => void;
+  setIceTransportPolicy: (policy: 'all' | 'relay') => void;
   setError: (err: string | null) => void;
   resetCall: () => void;
 }
@@ -146,6 +155,12 @@ export const useCallStore = create<CallStoreState>((set) => ({
   isBackgroundBlurred: false,
   isRatingModalOpen: false,
   lastEndedCallId: null,
+  iceTransportPolicy:
+    typeof process !== 'undefined' &&
+    (process.env.NEXT_PUBLIC_FORCE_TURN_RELAY === 'true' ||
+      process.env.NEXT_PUBLIC_ICE_TRANSPORT_POLICY === 'relay')
+      ? 'relay'
+      : 'all',
 
   setInitiating: (partner, conversationId, callType) =>
     set({
@@ -304,6 +319,7 @@ export const useCallStore = create<CallStoreState>((set) => ({
   setIsBackgroundBlurred: (isBackgroundBlurred) => set({ isBackgroundBlurred }),
   openRatingModal: (lastEndedCallId) => set({ isRatingModalOpen: true, lastEndedCallId }),
   closeRatingModal: () => set({ isRatingModalOpen: false }),
+  setIceTransportPolicy: (iceTransportPolicy) => set({ iceTransportPolicy }),
   setError: (error) => set({ error }),
 
   resetCall: () =>

@@ -16,7 +16,7 @@ export const getIceServers = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const iceConfig = CallService.getIceServers(req.user!.userId);
+    const iceConfig = await CallService.getIceServers(req.user!.userId);
     sendSuccess(res, iceConfig);
   } catch (error) {
     next(error);

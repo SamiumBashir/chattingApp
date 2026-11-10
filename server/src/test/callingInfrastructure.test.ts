@@ -102,18 +102,18 @@ describe('Phase 2 — Secure TURN/STUN Infrastructure Tests', () => {
   });
 
   describe('CallService.getIceServers() & Ephemeral TURN Credentials', () => {
-    it('includes default public STUN servers when STUN_SERVERS is empty', () => {
+    it('includes default public STUN servers when STUN_SERVERS is empty', async () => {
       const originalStun = env.STUN_SERVERS;
       (env as any).STUN_SERVERS = undefined;
 
-      const result = CallService.getIceServers(mockUser.id);
+      const result = await CallService.getIceServers(mockUser.id);
       expect(result.iceServers[0].urls).toContain('stun:stun.l.google.com:19302');
       expect(result.iceServers[0].urls).toContain('stun:stun.services.mozilla.com');
 
       (env as any).STUN_SERVERS = originalStun;
     });
 
-    it('generates short-lived HMAC-SHA1 TURN credentials conforming to RFC 5766', () => {
+    it('generates short-lived HMAC-SHA1 TURN credentials conforming to RFC 5766', async () => {
       const originalUrl = env.TURN_SERVER_URL;
       const originalTurnsUrl = env.TURNS_SERVER_URL;
       const originalSecret = env.TURN_SECRET;
@@ -125,7 +125,7 @@ describe('Phase 2 — Secure TURN/STUN Infrastructure Tests', () => {
       (env as any).TURN_CREDENTIAL_TTL = 3600; // 1 hour
 
       const beforeTime = Math.floor(Date.now() / 1000);
-      const result = CallService.getIceServers(mockUser.id);
+      const result = await CallService.getIceServers(mockUser.id);
       const afterTime = Math.floor(Date.now() / 1000);
 
       expect(result.ttl).toBe(3600);
@@ -160,7 +160,7 @@ describe('Phase 2 — Secure TURN/STUN Infrastructure Tests', () => {
       (env as any).TURN_CREDENTIAL_TTL = originalTtl;
     });
 
-    it('supports static TURN credentials as fallback when TURN_SECRET is not configured', () => {
+    it('supports static TURN credentials as fallback when TURN_SECRET is not configured', async () => {
       const originalUrl = env.TURN_SERVER_URL;
       const originalSecret = env.TURN_SECRET;
       const originalUser = env.TURN_USERNAME;
@@ -171,7 +171,7 @@ describe('Phase 2 — Secure TURN/STUN Infrastructure Tests', () => {
       (env as any).TURN_USERNAME = 'static_user';
       (env as any).TURN_CREDENTIAL = 'static_password_123';
 
-      const result = CallService.getIceServers(mockUser.id);
+      const result = await CallService.getIceServers(mockUser.id);
       const turnServer = result.iceServers[1];
       expect(turnServer).toBeDefined();
       expect(turnServer.username).toBe('static_user');

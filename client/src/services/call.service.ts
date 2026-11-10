@@ -9,8 +9,9 @@ export interface IceServerConfig {
 
 export interface IceServersData {
   iceServers: RTCIceServer[];
-  ttl: number;
-  expiresAt: string;
+  ttl?: number;
+  expiresAt?: string;
+  isStatic?: boolean;
 }
 
 export const DEFAULT_STUN_SERVERS: RTCIceServer[] = [
@@ -47,23 +48,29 @@ export interface CallHistoryResponse {
 
 export const callService = {
   /**
-   * Fetches fresh STUN/TURN ICE servers with short-lived credentials from backend
+   * Fetches fresh STUN/TURN ICE servers (supporting Metered and CoTURN) from backend
    */
   async fetchIceServers(): Promise<RTCIceServer[]> {
     try {
       const res = await apiClient.get<ApiResponse<IceServersData>>('/calls/ice-servers');
-      if (res.data?.success && res.data.data?.iceServers?.length) {
-        cachedIceServers = res.data.data.iceServers;
-        // Expire 60 seconds before actual TTL to guarantee validity during connection negotiation
-        const expiryMs = res.data.data.expiresAt
-          ? new Date(res.data.data.expiresAt).getTime() - 60000
-          : Date.now() + (res.data.data.ttl || 86400) * 1000 - 60000;
-        cacheExpiryTime = expiryMs;
-        return cachedIceServers;
+      const data = res.data?.data || (res.data as any);
+      if (data?.iceServers?.length) {
+        cachedIceServers = data.iceServers;
+        if (data.isStatic || !data.expiresAt) {
+          // Static credentials: cache for 24 hours to avoid redundant requests while enabling daily rotation
+          cacheExpiryTime = Date.now() + 24 * 60 * 60 * 1000;
+        } else {
+          // Ephemeral credentials: expire 60 seconds before actual TTL to guarantee validity during negotiation
+          const expiryMs = data.expiresAt
+            ? new Date(data.expiresAt).getTime() - 60000
+            : Date.now() + (data.ttl || 86400) * 1000 - 60000;
+          cacheExpiryTime = expiryMs;
+        }
+        return data.iceServers;
       }
       return cachedIceServers || DEFAULT_STUN_SERVERS;
     } catch (err) {
-      console.warn('Could not fetch ephemeral ICE servers from backend, falling back to STUN:', err);
+      console.warn('Could not fetch ICE servers from backend, falling back to STUN:', err);
       return cachedIceServers || DEFAULT_STUN_SERVERS;
     } finally {
       pendingFetchPromise = null;
@@ -100,12 +107,19 @@ export const callService = {
   },
 
   /**
-   * Clears cached ICE servers (e.g., on sign-out)
+   * Clears cached ICE servers (e.g. on ICE authorization failure or credential refresh)
    */
-  clearCache(): void {
+  clearIceServersCache(): void {
     cachedIceServers = null;
     cacheExpiryTime = 0;
     pendingFetchPromise = null;
+  },
+
+  /**
+   * Clears cached ICE servers (e.g., on sign-out)
+   */
+  clearCache(): void {
+    this.clearIceServersCache();
   },
 
   /**
